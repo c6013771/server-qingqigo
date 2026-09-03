@@ -20,7 +20,7 @@ export class FavoritesController {
     return this.favorites.list(user.id);
   }
 
-  @ApiOperation({ summary: '添加常去（最多 12 个）' })
+  @ApiOperation({ summary: '添加常去（最多 18 个）' })
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateFavoriteDto) {
     return this.favorites.create(user.id, dto);

@@ -4,7 +4,7 @@ import { CreateFavoriteDto } from './dto/create-favorite.dto';
 import { UpdateFavoriteDto } from './dto/update-favorite.dto';
 
 /** 「我的常去」数量上限 */
-const MAX_FAVORITES = 12;
+const MAX_FAVORITES = 18;
 
 @Injectable()
 export class FavoritesService {

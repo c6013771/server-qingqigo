@@ -13,4 +13,10 @@ export default () => ({
     port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
     password: process.env.REDIS_PASSWORD || undefined,
   },
+  qweather: {
+    key: process.env.QWEATHER_API_KEY ?? '',
+    // 和风天气 API Host：新版控制台为每个账号分配独立 Host（如 abcxyz.qweatherapi.com），
+    // 旧版免费 key 使用 devapi.qweather.com
+    host: process.env.QWEATHER_API_HOST ?? 'devapi.qweather.com',
+  },
 });

@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String          @id @default(uuid())
+  phone        String?         @unique
+  email        String?         @unique
+  wxOpenid     String?         @unique @map("wx_openid")
+  passwordHash String?         @map("password_hash")
+  nickname     String?
+  avatarUrl    String?         @map("avatar_url")
+  role         String          @default("user")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  lastLoginAt  DateTime?       @map("last_login_at")
+  favorites    UserFavorite[]
+  requests     FeatureRequest[]
+  votes        RequestVote[]
+
+  @@map("users")
+}
+
+model UserFavorite {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  name      String
+  icon      String?
+  url       String
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_favorites")
+}
+
+enum RequestType {
+  ADD_SITE    @map("add_site")
+  ADD_FEATURE @map("add_feature")
+  IMPROVEMENT @map("improvement")
+  OTHER       @map("other")
+}
+
+enum RequestStatus {
+  PENDING    @map("pending")
+  EVALUATING @map("evaluating")
+  ACCEPTED   @map("accepted")
+  DEVELOPING @map("developing")
+  RELEASED   @map("released")
+  REJECTED   @map("rejected")
+}
+
+model FeatureRequest {
+  id          String        @id @default(uuid())
+  requestNo   String        @unique @map("request_no")
+  userId      String?       @map("user_id")
+  type        RequestType
+  title       String
+  description String?
+  url         String?
+  contact     String?
+  status      RequestStatus @default(PENDING)
+  adminNote   String?       @map("admin_note")
+  upvotes     Int           @default(0)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  user        User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  votes       RequestVote[]
+
+  @@map("feature_requests")
+}
+
+model RequestVote {
+  id        String         @id @default(uuid())
+  requestId String         @map("request_id")
+  userId    String         @map("user_id")
+  createdAt DateTime       @default(now()) @map("created_at")
+  request   FeatureRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, userId])
+  @@map("request_votes")
+}

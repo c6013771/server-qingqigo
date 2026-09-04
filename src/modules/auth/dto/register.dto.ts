@@ -17,7 +17,7 @@ export class RegisterDto {
   @MaxLength(64)
   password: string;
 
-  @ApiPropertyOptional({ description: '昵称（最长 32 字符）', example: '轻启用户' })
+  @ApiPropertyOptional({ description: '昵称（最长 32 字符）', example: '轻启er用户' })
   @IsOptional()
   @IsString()
   @MaxLength(32)

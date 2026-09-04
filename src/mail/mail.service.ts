@@ -37,19 +37,24 @@ export class MailService {
   /** 发送注册验证码 */
   async sendVerifyCode(to: string, code: string): Promise<void> {
     if (!this.transporter) throw new ServiceUnavailableException('邮件服务未配置');
-    await this.transporter.sendMail({
-      from: `轻启go <${this.from}>`,
-      to,
-      subject: `轻启go 注册验证码：${code}`,
-      html: `
+    try {
+      await this.transporter.sendMail({
+        from: `轻启er <${this.from}>`,
+        to,
+        subject: `【轻启er】注册验证码：${code}`,
+        html: `
         <div style="max-width:480px;margin:0 auto;padding:32px;font-family:system-ui,sans-serif;color:#1A1A2E">
-          <h2 style="margin:0 0 16px">轻启go 邮箱验证</h2>
-          <p style="margin:0 0 8px">你正在注册轻启go 账号，验证码为：</p>
+          <h2 style="margin:0 0 16px">轻启er 邮箱验证</h2>
+          <p style="margin:0 0 8px">你正在注册轻启er 账号，验证码为：</p>
           <p style="font-size:32px;font-weight:700;letter-spacing:8px;margin:16px 0">${code}</p>
           <p style="margin:0 0 8px;color:#6C757D">验证码 10 分钟内有效，请勿泄露给他人。</p>
           <p style="margin:0;color:#ADB5BD;font-size:12px">如果这不是你的操作，请忽略本邮件。</p>
         </div>`,
-    });
+      });
+    } catch (e) {
+      this.logger.error(`邮件发送失败: ${(e as Error).message}`);
+      throw new ServiceUnavailableException('邮件发送失败，请稍后重试');
+    }
     this.logger.log(`验证码邮件已发送至 ${to}`);
   }
 }

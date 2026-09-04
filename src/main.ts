@@ -21,8 +21,8 @@ async function bootstrap() {
   // Swagger 接口文档：http://localhost:3000/api-docs
   // 注意挂载路径不带全局前缀 /api，避免与业务路由冲突
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('轻启 API 文档')
-    .setDescription('「轻启（QingStart）」清爽导航主页后端接口文档。统一响应格式：{ code, message, data }。')
+    .setTitle('轻启er API 文档')
+    .setDescription('「轻启er（QingQiEr）」清爽导航主页后端接口文档。统一响应格式：{ code, message, data }。')
     .setVersion('1.0')
     .addBearerAuth()
     .build();

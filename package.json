@@ -1,7 +1,7 @@
 {
   "name": "server-qingqigo",
   "version": "0.1.0",
-  "description": "轻启（QingStart）清爽导航主页 - 后端服务",
+  "description": "轻启er（QingQiEr）清爽导航主页 - 后端服务",
   "private": true,
   "license": "MIT",
   "scripts": {

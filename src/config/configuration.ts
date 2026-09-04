@@ -19,4 +19,12 @@ export default () => ({
     // 旧版免费 key 使用 devapi.qweather.com
     host: process.env.QWEATHER_API_HOST ?? 'devapi.qweather.com',
   },
+  mail: {
+    // SMTP 发信配置（QQ/163 邮箱用「授权码」而非登录密码，Gmail 用应用专用密码）
+    host: process.env.SMTP_HOST ?? '',
+    port: parseInt(process.env.SMTP_PORT ?? '465', 10),
+    user: process.env.SMTP_USER ?? '',
+    pass: process.env.SMTP_PASS ?? '',
+    from: process.env.MAIL_FROM ?? process.env.SMTP_USER ?? '',
+  },
 });

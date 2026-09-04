@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
+import { MailModule } from './mail/mail.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { FavoritesModule } from './modules/favorites/favorites.module';
@@ -15,6 +16,7 @@ import { WeatherModule } from './modules/weather/weather.module';
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
     PrismaModule,
     RedisModule,
+    MailModule,
     AuthModule,
     UsersModule,
     FavoritesModule,

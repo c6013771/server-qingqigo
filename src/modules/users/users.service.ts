@@ -27,4 +27,8 @@ export class UsersService {
   touchLastLogin(id: string) {
     return this.prisma.user.update({ where: { id }, data: { lastLoginAt: new Date() } });
   }
+
+  updatePassword(id: string, passwordHash: string) {
+    return this.prisma.user.update({ where: { id }, data: { passwordHash } });
+  }
 }

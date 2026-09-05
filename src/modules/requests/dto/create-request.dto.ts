@@ -8,7 +8,7 @@ export class CreateRequestDto {
     enum: RequestType,
     example: 'ADD_SITE',
   })
-  @IsEnum(RequestType, { message: 'type 必须是 add_site / add_feature / improvement / other 之一' })
+  @IsEnum(RequestType, { message: 'type 必须是 ADD_SITE / ADD_FEATURE / IMPROVEMENT / OTHER 之一' })
   type: RequestType;
 
   @ApiProperty({ description: '需求标题', example: '希望收录某某导航站' })

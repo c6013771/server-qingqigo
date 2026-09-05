@@ -1,6 +1,8 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import { mailTemplates } from './templates';
+import { MailTemplateId, MailTemplateParamsMap } from './templates/mail-templates.types';
 
 /**
  * SMTP 邮件服务。未配置 SMTP_HOST/USER/PASS 时 enabled=false，
@@ -34,27 +36,24 @@ export class MailService {
     return !!this.transporter;
   }
 
-  /** 发送注册验证码 */
-  async sendVerifyCode(to: string, code: string): Promise<void> {
+  /**
+   * 按模板发送邮件。模板在 src/mail/templates/ 注册，
+   * params 类型由模板 ID 推导，传错参数编译期报错。
+   */
+  async send<K extends MailTemplateId>(to: string, template: K, params: MailTemplateParamsMap[K]): Promise<void> {
     if (!this.transporter) throw new ServiceUnavailableException('邮件服务未配置');
+    const tpl = mailTemplates[template];
     try {
       await this.transporter.sendMail({
         from: `轻启er <${this.from}>`,
         to,
-        subject: `【轻启er】注册验证码：${code}`,
-        html: `
-        <div style="max-width:480px;margin:0 auto;padding:32px;font-family:system-ui,sans-serif;color:#1A1A2E">
-          <h2 style="margin:0 0 16px">轻启er 邮箱验证</h2>
-          <p style="margin:0 0 8px">你正在注册轻启er 账号，验证码为：</p>
-          <p style="font-size:32px;font-weight:700;letter-spacing:8px;margin:16px 0">${code}</p>
-          <p style="margin:0 0 8px;color:#6C757D">验证码 10 分钟内有效，请勿泄露给他人。</p>
-          <p style="margin:0;color:#ADB5BD;font-size:12px">如果这不是你的操作，请忽略本邮件。</p>
-        </div>`,
+        subject: tpl.subject(params),
+        html: tpl.html(params),
       });
     } catch (e) {
       this.logger.error(`邮件发送失败: ${(e as Error).message}`);
       throw new ServiceUnavailableException('邮件发送失败，请稍后重试');
     }
-    this.logger.log(`验证码邮件已发送至 ${to}`);
+    this.logger.log(`邮件已发送至 ${to}（模板：${template}）`);
   }
 }

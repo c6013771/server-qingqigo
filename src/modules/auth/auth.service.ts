@@ -7,11 +7,18 @@ import { MailService } from '../../mail/mail.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { SendCodeDto } from './dto/send-code.dto';
+import { SendResetCodeDto } from './dto/send-reset-code.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 /** 验证码 10 分钟有效、60 秒重发间隔、单邮箱每日最多 10 次 */
 const CODE_TTL = 600;
 const RESEND_INTERVAL = 60;
 const DAILY_LIMIT = 10;
+/** 单 IP 每日最多发码 30 次：防止遍历不同邮箱绕过单邮箱上限，轰炸他人收件箱 */
+const IP_DAILY_LIMIT = 30;
+
+/** 验证码场景的 Redis key 命名空间：verify=注册，reset=找回密码 */
+type CodeScene = 'verify' | 'reset';
 
 @Injectable()
 export class AuthService {
@@ -23,28 +30,43 @@ export class AuthService {
   ) {}
 
   /** 发送注册验证码 */
-  async sendCode(dto: SendCodeDto) {
+  async sendCode(dto: SendCodeDto, ip: string) {
     const email = dto.email.trim().toLowerCase();
 
     const exists = await this.users.findByEmail(email);
     if (exists) throw new ConflictException('该邮箱已注册');
 
-    if (await this.redis.get(`verify:resend:${email}`)) {
-      throw new BadRequestException('发送太频繁，请 60 秒后再试');
-    }
-    const dailyKey = `verify:daily:${email}`;
-    const count = await this.redis.incr(dailyKey);
-    if (count === 1) await this.redis.expire(dailyKey, 86400);
-    if (count > DAILY_LIMIT) {
-      throw new BadRequestException('该邮箱今日发送次数已达上限，请明天再试');
-    }
+    return this.sendCodeWithLimit(email, 'verify', 'register-code', ip);
+  }
 
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    await this.mail.sendVerifyCode(email, code);
-    // 发送成功才落验证码和重发间隔，避免邮件服务故障时误锁用户
-    await this.redis.set(`verify:${email}`, code, CODE_TTL);
-    await this.redis.set(`verify:resend:${email}`, '1', RESEND_INTERVAL);
-    return { sent: true };
+  /** 发送找回密码验证码 */
+  async sendResetCode(dto: SendResetCodeDto, ip: string) {
+    const email = dto.email.trim().toLowerCase();
+
+    const exists = await this.users.findByEmail(email);
+    // 邮箱未注册时也按发送成功返回，不暴露账号是否存在（与登录的统一提示同理）
+    if (!exists) return { sent: true };
+
+    return this.sendCodeWithLimit(email, 'reset', 'reset-code', ip);
+  }
+
+  /** 验证码 + 新密码重置 */
+  async resetPassword(dto: ResetPasswordDto) {
+    const email = dto.email.trim().toLowerCase();
+
+    const key = 'reset:' + email;
+    const code = await this.redis.get(key);
+    if (!code || code !== dto.code) throw new BadRequestException('验证码错误或已过期');
+
+    const user = await this.users.findByEmail(email);
+    // 验证码存在说明发码时已确认账号存在，这里只是兜底，且不暴露账号是否存在
+    if (!user) throw new BadRequestException('验证码错误或已过期');
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+    await this.users.updatePassword(user.id, passwordHash);
+    // 验证成功后立即作废，防止复用
+    await this.redis.del(key);
+    return { reset: true };
   }
 
   async register(dto: RegisterDto) {
@@ -78,6 +100,36 @@ export class AuthService {
 
     await this.users.touchLastLogin(user.id);
     return this.buildAuthResult(user);
+  }
+
+  /**
+   * 各场景共用的验证码发送：60 秒重发间隔 + 每日上限限流，
+   * 发送成功才落验证码和重发间隔，避免邮件服务故障时误锁用户。
+   */
+  private async sendCodeWithLimit(email: string, scene: CodeScene, template: 'register-code' | 'reset-code', ip: string) {
+    // 先卡 IP 总量：单邮箱限制防不了换邮箱轰炸，这里是兜底
+    const ipKey = `code:ip:${ip}`;
+    const ipCount = await this.redis.incr(ipKey);
+    if (ipCount === 1) await this.redis.expire(ipKey, 86400);
+    if (ipCount > IP_DAILY_LIMIT) {
+      throw new BadRequestException('操作太频繁，请明天再试');
+    }
+
+    if (await this.redis.get(`${scene}:resend:${email}`)) {
+      throw new BadRequestException('发送太频繁，请 60 秒后再试');
+    }
+    const dailyKey = `${scene}:daily:${email}`;
+    const count = await this.redis.incr(dailyKey);
+    if (count === 1) await this.redis.expire(dailyKey, 86400);
+    if (count > DAILY_LIMIT) {
+      throw new BadRequestException('该邮箱今日发送次数已达上限，请明天再试');
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    await this.mail.send(email, template, { code });
+    await this.redis.set(`${scene}:${email}`, code, CODE_TTL);
+    await this.redis.set(`${scene}:resend:${email}`, '1', RESEND_INTERVAL);
+    return { sent: true };
   }
 
   /** 签发 JWT 并返回基础用户信息 */

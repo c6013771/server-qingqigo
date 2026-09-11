@@ -19,6 +19,10 @@ export default () => ({
     // 旧版免费 key 使用 devapi.qweather.com
     host: process.env.QWEATHER_API_HOST ?? 'devapi.qweather.com',
   },
+  sites: {
+    // 站点图标抓取失败时的兜底图：默认用前端的静态资源（相对前端源），也可配成完整 URL
+    defaultIcon: process.env.SITE_DEFAULT_ICON ?? '/icons/_default.svg',
+  },
   mail: {
     // SMTP 发信配置（QQ/163 邮箱用「授权码」而非登录密码，Gmail 用应用专用密码）
     host: process.env.SMTP_HOST ?? '',

@@ -10,6 +10,7 @@ import { FavoritesModule } from './modules/favorites/favorites.module';
 import { RequestsModule } from './modules/requests/requests.module';
 import { HotListsModule } from './modules/hot-lists/hot-lists.module';
 import { WeatherModule } from './modules/weather/weather.module';
+import { SitesModule } from './modules/sites/sites.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { WeatherModule } from './modules/weather/weather.module';
     RequestsModule,
     HotListsModule,
     WeatherModule,
+    SitesModule,
   ],
 })
 export class AppModule {}

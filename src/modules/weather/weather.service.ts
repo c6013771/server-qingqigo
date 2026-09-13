@@ -2,8 +2,9 @@ import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../../redis/redis.service';
 
-/** 天气缓存 10 分钟，IP 定位缓存 24 小时 */
+/** 天气缓存 10 分钟，7 天预报缓存 30 分钟，IP 定位缓存 24 小时 */
 const WEATHER_CACHE_TTL = 600;
+const FORECAST_CACHE_TTL = 1800;
 const LOCATION_CACHE_TTL = 86400;
 /** 上游接口超时时间（毫秒） */
 const UPSTREAM_TIMEOUT = 3000;
@@ -11,6 +12,20 @@ const UPSTREAM_TIMEOUT = 3000;
 export interface WeatherResult {
   temp: string;
   text: string;
+}
+
+export interface ForecastDay {
+  /** YYYY-MM-DD */
+  date: string;
+  text: string;
+  tempMin: string;
+  tempMax: string;
+}
+
+export interface WeatherForecast extends WeatherResult {
+  city: string;
+  /** 未来 7 天（含今天） */
+  days: ForecastDay[];
 }
 
 @Injectable()
@@ -60,7 +75,7 @@ export class WeatherService {
     }
 
     const data = await this.fetchJson(
-      `https://${host}/v7/weather/now?location=${locationId}&key=${key}`,
+      `https://${host}/v7/weather/now?location=${locationId}&key=${key}&lang=zh`,
     );
     if (data.code !== '200' || !data.now) {
       throw new Error(`和风实时天气失败 code=${data.code}`);
@@ -81,6 +96,89 @@ export class WeatherService {
     const cur = data.current;
     if (!cur) throw new Error('Open-Meteo 无数据');
     return { temp: String(Math.round(cur.temperature_2m)), text: this.wmoText(cur.weather_code) };
+  }
+
+  /** 按请求 IP 定位城市，返回实时天气 + 未来 7 天预报（和风为主，Open-Meteo 兜底，缓存 30 分钟） */
+  async getForecastByIp(ip?: string): Promise<WeatherForecast & { cached: boolean }> {
+    const queryIp = ip && !this.isPrivateIp(ip) ? ip : '';
+    const key = `weather:forecast7:${queryIp || 'self'}`;
+    const cached = await this.cacheGet(key);
+    if (cached) return { ...JSON.parse(cached), cached: true };
+
+    const { city } = await this.getCityByIp(ip);
+    const providers: Array<[string, (city: string) => Promise<Omit<WeatherForecast, 'city'>>]> = [
+      ['和风', (c) => this.forecastFromQweather(c)],
+      ['Open-Meteo', (c) => this.forecastFromOpenMeteo(c)],
+    ];
+    for (const [name, provider] of providers) {
+      try {
+        const result = await provider(city);
+        const forecast: WeatherForecast = { city, ...result };
+        await this.cacheSet(key, JSON.stringify(forecast), FORECAST_CACHE_TTL);
+        return { ...forecast, cached: false };
+      } catch (e) {
+        this.logger.warn(`7 天预报源 ${name} 失败: ${(e as Error).message}`);
+      }
+    }
+    throw new BadGatewayException('所有天气源均不可用');
+  }
+
+  /** 和风 7 天预报：城市搜索取 LocationID，实时 + 逐天预报各查一次 */
+  private async forecastFromQweather(city: string): Promise<Omit<WeatherForecast, 'city'>> {
+    const key = this.config.get<string>('qweather.key');
+    const host = this.config.get<string>('qweather.host');
+    if (!key) throw new Error('未配置 QWEATHER_API_KEY');
+
+    const geo = await this.fetchJson(
+      `https://${host}/geo/v2/city/lookup?location=${encodeURIComponent(city)}&key=${key}`,
+    );
+    const locationId = geo.location?.[0]?.id;
+    if (geo.code !== '200' || !locationId) {
+      throw new Error(`和风城市搜索失败 code=${geo.code}`);
+    }
+
+    const [now, daily] = await Promise.all([
+      this.fetchJson(`https://${host}/v7/weather/now?location=${locationId}&key=${key}&lang=zh`),
+      this.fetchJson(`https://${host}/v7/weather/7d?location=${locationId}&key=${key}&lang=zh`),
+    ]);
+    if (now.code !== '200' || !now.now) throw new Error(`和风实时天气失败 code=${now.code}`);
+    if (daily.code !== '200' || !daily.daily?.length) throw new Error(`和风 7 天预报失败 code=${daily.code}`);
+    return {
+      temp: now.now.temp,
+      text: now.now.text,
+      days: daily.daily.slice(0, 7).map((d: any) => ({
+        date: d.fxDate,
+        text: d.textDay,
+        tempMin: d.tempMin,
+        tempMax: d.tempMax,
+      })),
+    };
+  }
+
+  /** Open-Meteo 7 天预报：地理编码后一次请求取实时 + 逐天预报 */
+  private async forecastFromOpenMeteo(city: string): Promise<Omit<WeatherForecast, 'city'>> {
+    const geo = await this.fetchJson(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=zh`,
+    );
+    const loc = geo.results?.[0];
+    if (!loc) throw new Error('Open-Meteo 找不到城市');
+    const data = await this.fetchJson(
+      `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}` +
+        `&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=7&timezone=auto`,
+    );
+    const cur = data.current;
+    const daily = data.daily;
+    if (!cur || !daily?.time?.length) throw new Error('Open-Meteo 无数据');
+    return {
+      temp: String(Math.round(cur.temperature_2m)),
+      text: this.wmoText(cur.weather_code),
+      days: daily.time.slice(0, 7).map((date: string, i: number) => ({
+        date,
+        text: this.wmoText(daily.weather_code[i]),
+        tempMin: String(Math.round(daily.temperature_2m_min[i])),
+        tempMax: String(Math.round(daily.temperature_2m_max[i])),
+      })),
+    };
   }
 
   /** 备用 2：60s API（开源项目 vikiboss/60s） */

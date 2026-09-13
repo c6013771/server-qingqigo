@@ -21,6 +21,7 @@ model User {
   favorites    UserFavorite[]
   requests     FeatureRequest[]
   votes        RequestVote[]
+  navCategories UserNavCategory[]
 
   @@map("users")
 }
@@ -36,6 +37,34 @@ model UserFavorite {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_favorites")
+}
+
+model UserNavCategory {
+  id          String        @id @default(uuid())
+  userId      String        @map("user_id")
+  label       String
+  /** 是否为系统内置分类的副本（用户登录后初始化，可自由编辑/删除） */
+  isBuiltin   Boolean       @default(false) @map("is_builtin")
+  sortOrder   Int           @default(0) @map("sort_order")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sites       UserNavSite[]
+
+  @@map("user_nav_categories")
+}
+
+model UserNavSite {
+  id         String          @id @default(uuid())
+  categoryId String          @map("category_id")
+  name       String
+  url        String
+  desc       String?
+  icon       String?
+  sortOrder  Int             @default(0) @map("sort_order")
+  createdAt  DateTime        @default(now()) @map("created_at")
+  category   UserNavCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@map("user_nav_sites")
 }
 
 enum RequestType {

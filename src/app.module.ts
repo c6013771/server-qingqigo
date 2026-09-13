@@ -11,6 +11,7 @@ import { RequestsModule } from './modules/requests/requests.module';
 import { HotListsModule } from './modules/hot-lists/hot-lists.module';
 import { WeatherModule } from './modules/weather/weather.module';
 import { SitesModule } from './modules/sites/sites.module';
+import { NavCategoriesModule } from './modules/nav-categories/nav-categories.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { SitesModule } from './modules/sites/sites.module';
     HotListsModule,
     WeatherModule,
     SitesModule,
+    NavCategoriesModule,
   ],
 })
 export class AppModule {}

@@ -103,8 +103,10 @@ export class AuthService {
   }
 
   /**
-   * 各场景共用的验证码发送：60 秒重发间隔 + 每日上限限流，
-   * 发送成功才落验证码和重发间隔，避免邮件服务故障时误锁用户。
+   * 各场景共用的验证码发送：60 秒重发间隔 + 每日上限限流。
+   * 重发间隔用 SET NX EX 在发信前原子占位，防止并发请求在检查通过、
+   * 占位写入前的空档里同时通过校验导致重复发信；
+   * 邮件发送失败时释放占位，避免邮件服务故障误锁用户。
    */
   private async sendCodeWithLimit(email: string, scene: CodeScene, template: 'register-code' | 'reset-code', ip: string) {
     // 先卡 IP 总量：单邮箱限制防不了换邮箱轰炸，这里是兜底
@@ -115,20 +117,31 @@ export class AuthService {
       throw new BadRequestException('操作太频繁，请明天再试');
     }
 
-    if (await this.redis.get(`${scene}:resend:${email}`)) {
+    // 原子占位：key 已存在（60 秒内发过）则返回 null，并发下只有第一个请求能拿到锁
+    const resendKey = `${scene}:resend:${email}`;
+    const locked = await this.redis.getClient().set(resendKey, '1', 'EX', RESEND_INTERVAL, 'NX');
+    if (!locked) {
       throw new BadRequestException('发送太频繁，请 60 秒后再试');
     }
+
     const dailyKey = `${scene}:daily:${email}`;
     const count = await this.redis.incr(dailyKey);
     if (count === 1) await this.redis.expire(dailyKey, 86400);
     if (count > DAILY_LIMIT) {
+      await this.redis.del(resendKey);
       throw new BadRequestException('该邮箱今日发送次数已达上限，请明天再试');
     }
 
     const code = String(Math.floor(100000 + Math.random() * 900000));
-    await this.mail.send(email, template, { code });
+    try {
+      await this.mail.send(email, template, { code });
+    } catch (err) {
+      // 发信失败释放重发锁，并回滚当日次数，避免故障期消耗用户配额
+      await this.redis.del(resendKey);
+      await this.redis.getClient().decr(dailyKey);
+      throw err;
+    }
     await this.redis.set(`${scene}:${email}`, code, CODE_TTL);
-    await this.redis.set(`${scene}:resend:${email}`, '1', RESEND_INTERVAL);
     return { sent: true };
   }
 

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RedisService } from '../../redis/redis.service';
 import { CreateNavCategoryDto } from './dto/create-nav-category.dto';
 import { UpdateNavCategoryDto } from './dto/update-nav-category.dto';
 import { CreateNavSiteDto } from './dto/create-nav-site.dto';
@@ -13,34 +14,56 @@ const MAX_SITES_PER_CATEGORY = 9;
 
 @Injectable()
 export class NavCategoriesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private redis: RedisService,
+  ) {}
 
   async list(userId: string) {
     await this.seedBuiltinCategories(userId);
     return this.prisma.userNavCategory.findMany({
       where: { userId },
-      // 内置分类副本排在前面，用户自定义分类在后
-      orderBy: [{ isBuiltin: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+      // sortOrder 由拖插排序接口统一重写；初始数据经迁移脚本排为「内置在前」
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       include: { sites: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] } },
     });
   }
 
-  /** 首次拉取时把系统内置分类初始化为用户自己的副本（之后可自由编辑/删除） */
+  /**
+   * 首次拉取时把系统内置分类初始化为用户自己的副本（之后可自由编辑/删除）。
+   * 仅当用户名下没有任何分类时播种，避免用户删光内置分类后被重复种回；
+   * Redis NX 锁防并发首次请求重复播种。
+   */
   private async seedBuiltinCategories(userId: string): Promise<void> {
-    const count = await this.prisma.userNavCategory.count({ where: { userId, isBuiltin: true } });
-    if (count > 0) return;
-    for (const [i, cat] of defaultNavCategories.entries()) {
-      await this.prisma.userNavCategory.create({
-        data: {
-          userId,
-          label: cat.label,
-          isBuiltin: true,
-          sortOrder: i,
-          sites: {
-            create: cat.sites.map((s, j) => ({ ...s, sortOrder: j })),
+    const lockKey = `nav:seed:${userId}`;
+    const locked = await this.redis.getClient().set(lockKey, '1', 'EX', 30, 'NX');
+    if (!locked) {
+      // 并发的其他请求正在播种：最多等 3 秒让其完成，避免首次并发拉取返回空列表
+      for (let i = 0; i < 12; i++) {
+        await new Promise((r) => setTimeout(r, 250));
+        const count = await this.prisma.userNavCategory.count({ where: { userId } });
+        if (count > 0) break;
+      }
+      return;
+    }
+    try {
+      const count = await this.prisma.userNavCategory.count({ where: { userId } });
+      if (count > 0) return;
+      for (const [i, cat] of defaultNavCategories.entries()) {
+        await this.prisma.userNavCategory.create({
+          data: {
+            userId,
+            label: cat.label,
+            isBuiltin: true,
+            sortOrder: i,
+            sites: {
+              create: cat.sites.map((s, j) => ({ ...s, sortOrder: j })),
+            },
           },
-        },
-      });
+        });
+      }
+    } finally {
+      await this.redis.del(lockKey);
     }
   }
 
@@ -49,9 +72,24 @@ export class NavCategoriesService {
     if (count >= MAX_CATEGORIES) {
       throw new BadRequestException(`自定义分类最多只能创建 ${MAX_CATEGORIES} 个`);
     }
+    // 追加到全部分类末尾（含内置副本），保证 sortOrder 连续递增
+    const total = await this.prisma.userNavCategory.count({ where: { userId } });
     return this.prisma.userNavCategory.create({
-      data: { ...dto, userId, sortOrder: count },
+      data: { ...dto, userId, sortOrder: total },
     });
+  }
+
+  /** 拖插排序：按提交的 id 顺序重写 sortOrder；要求提交的 id 恰好是用户的全部分类 */
+  async updateOrder(userId: string, ids: string[]) {
+    const owned = await this.prisma.userNavCategory.findMany({ where: { userId }, select: { id: true } });
+    const ownedIds = new Set(owned.map((c) => c.id));
+    if (ids.length !== ownedIds.size || ids.some((id) => !ownedIds.has(id))) {
+      throw new BadRequestException('排序数据与当前分类不一致，请刷新后重试');
+    }
+    await this.prisma.$transaction(
+      ids.map((id, i) => this.prisma.userNavCategory.update({ where: { id }, data: { sortOrder: i } })),
+    );
+    return { sorted: true };
   }
 
   async updateCategory(id: string, userId: string, dto: UpdateNavCategoryDto) {

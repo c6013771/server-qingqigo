@@ -7,6 +7,7 @@ import { CreateNavCategoryDto } from './dto/create-nav-category.dto';
 import { UpdateNavCategoryDto } from './dto/update-nav-category.dto';
 import { CreateNavSiteDto } from './dto/create-nav-site.dto';
 import { UpdateNavSiteDto } from './dto/update-nav-site.dto';
+import { ReorderNavCategoriesDto } from './dto/reorder-nav-categories.dto';
 
 /** 自定义导航分类：全部接口需登录，且只能操作自己的数据 */
 @ApiTags('自定义导航分类')
@@ -28,6 +29,13 @@ export class NavCategoriesController {
     return this.navCategories.createCategory(user.id, dto);
   }
 
+  // 注意：必须在 @Patch(':id') 之前声明，否则 order 会被当作 :id 匹配
+  @ApiOperation({ summary: '拖拽排序：按提交顺序重排全部分类' })
+  @Patch('order')
+  updateOrder(@CurrentUser() user: AuthUser, @Body() dto: ReorderNavCategoriesDto) {
+    return this.navCategories.updateOrder(user.id, dto.ids);
+  }
+
   @ApiOperation({ summary: '重命名分类' })
   @Patch(':id')
   updateCategory(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateNavCategoryDto) {
@@ -40,7 +48,7 @@ export class NavCategoriesController {
     return this.navCategories.removeCategory(id, user.id);
   }
 
-  @ApiOperation({ summary: '分类下添加网站（每个分类最多 6 个）' })
+  @ApiOperation({ summary: '分类下添加网站（每个分类最多 9 个）' })
   @Post(':id/sites')
   createSite(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: CreateNavSiteDto) {
     return this.navCategories.createSite(id, user.id, dto);

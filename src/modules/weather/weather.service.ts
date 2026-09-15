@@ -123,6 +123,30 @@ export class WeatherService {
     throw new BadGatewayException('所有天气源均不可用');
   }
 
+  /** 手动指定城市：跳过 IP 定位，返回实时天气 + 未来 7 天预报（缓存 30 分钟） */
+  async getForecastByCity(city: string): Promise<WeatherForecast & { cached: boolean }> {
+    const name = await this.resolveCityName(city);
+    const key = `weather:forecast7:city:${name}`;
+    const cached = await this.cacheGet(key);
+    if (cached) return { ...JSON.parse(cached), cached: true };
+
+    const providers: Array<[string, (city: string) => Promise<Omit<WeatherForecast, 'city'>>]> = [
+      ['和风', (c) => this.forecastFromQweather(c)],
+      ['Open-Meteo', (c) => this.forecastFromOpenMeteo(c)],
+    ];
+    for (const [providerName, provider] of providers) {
+      try {
+        const result = await provider(name);
+        const forecast: WeatherForecast = { city: name, ...result };
+        await this.cacheSet(key, JSON.stringify(forecast), FORECAST_CACHE_TTL);
+        return { ...forecast, cached: false };
+      } catch (e) {
+        this.logger.warn(`7 天预报源 ${providerName} 失败: ${(e as Error).message}`);
+      }
+    }
+    throw new BadGatewayException('所有天气源均不可用');
+  }
+
   /** 和风 7 天预报：城市搜索取 LocationID，实时 + 逐天预报各查一次 */
   private async forecastFromQweather(city: string): Promise<Omit<WeatherForecast, 'city'>> {
     const key = this.config.get<string>('qweather.key');
@@ -203,8 +227,40 @@ export class WeatherService {
     return '';
   }
 
-  /** IP 定位：依次降级 ipwho.is → ip-api.com，结果按 IP 缓存 */
+  /** IP 定位：依次降级 ipwho.is → ip-api.com，结果按 IP 缓存；城市名统一转为中文 */
   async getCityByIp(ip?: string): Promise<{ city: string; cached: boolean }> {
+    const result = await this.lookupCityByIp(ip);
+    return { city: await this.resolveCityName(result.city), cached: result.cached };
+  }
+
+  /** 城市名中文化：拼音/英文名 → 中文名（和风 GeoAPI，lang=zh），结果缓存 24 小时 */
+  private async resolveCityName(city: string): Promise<string> {
+    if (/[一-龥]/.test(city)) return city;
+    const key = `geo:name:${city.toLowerCase()}`;
+    const cached = await this.cacheGet(key);
+    if (cached) return cached;
+
+    try {
+      const qKey = this.config.get<string>('qweather.key');
+      const host = this.config.get<string>('qweather.host');
+      if (qKey) {
+        const geo = await this.fetchJson(
+          `https://${host}/geo/v2/city/lookup?location=${encodeURIComponent(city)}&key=${qKey}&lang=zh`,
+        );
+        const name = geo.code === '200' ? geo.location?.[0]?.name : null;
+        if (name) {
+          await this.cacheSet(key, name, LOCATION_CACHE_TTL);
+          return name;
+        }
+      }
+    } catch (e) {
+      this.logger.warn(`城市名中文化失败: ${(e as Error).message}`);
+    }
+    return city;
+  }
+
+  /** IP 定位：依次降级 ipwho.is → ip-api.com，结果按 IP 缓存 */
+  private async lookupCityByIp(ip?: string): Promise<{ city: string; cached: boolean }> {
     // 内网/回环 IP（本地开发常见）无法定位，交给接口按调用方 IP 自动判断
     const queryIp = ip && !this.isPrivateIp(ip) ? ip : '';
     const key = `geo:ip:${queryIp || 'self'}`;

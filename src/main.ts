@@ -10,7 +10,15 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.setGlobalPrefix('api');
-  app.enableCors();
+  // CORS：只允许自己的前端域名跨域调用（本地开发保留 Astro 默认端口）
+  app.enableCors({
+    origin: [
+      'https://qingqier.com',
+      'https://www.qingqier.com',
+      'http://localhost:4321',
+      'http://127.0.0.1:4321',
+    ],
+  });
   // 全局参数校验：自动剔除未声明字段、按 DTO 类型转换
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   // 统一错误响应：{ code, message, data: null }

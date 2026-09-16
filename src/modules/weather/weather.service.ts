@@ -7,7 +7,7 @@ const WEATHER_CACHE_TTL = 600;
 const FORECAST_CACHE_TTL = 1800;
 const LOCATION_CACHE_TTL = 86400;
 /** 上游接口超时时间（毫秒） */
-const UPSTREAM_TIMEOUT = 3000;
+const UPSTREAM_TIMEOUT = 10000;
 
 export interface WeatherResult {
   temp: string;

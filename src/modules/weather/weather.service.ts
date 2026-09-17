@@ -259,15 +259,16 @@ export class WeatherService {
     return city;
   }
 
-  /** IP 定位：依次降级 ipwho.is → ip-api.com，结果按 IP 缓存 */
+  /** IP 定位：依次降级 高德 → ipwho.is → ip-api.com，结果按 IP 缓存 */
   private async lookupCityByIp(ip?: string): Promise<{ city: string; cached: boolean }> {
-    // 内网/回环 IP（本地开发常见）无法定位，交给接口按调用方 IP 自动判断
-    const queryIp = ip && !this.isPrivateIp(ip) ? ip : '';
+    // 内网/回环 IP（本地开发常见）无法定位，按本机公网 IPv4 出口定位
+    const queryIp = ip && !this.isPrivateIp(ip) ? ip : await this.resolveSelfIpv4();
     const key = `geo:ip:${queryIp || 'self'}`;
     const cached = await this.cacheGet(key);
     if (cached) return { city: cached, cached: true };
 
     const providers: Array<[string, (ip: string) => Promise<string | null>]> = [
+      ['高德', (i) => this.cityFromAmap(i)],
       ['ipwho.is', (i) => this.cityFromIpwho(i)],
       ['ip-api.com', (i) => this.cityFromIpApi(i)],
     ];
@@ -303,6 +304,20 @@ export class WeatherService {
     }
   }
 
+  /** 高德 IP 定位：国内运营商 IP 比国外库准得多，直接返回中文省市 */
+  private async cityFromAmap(ip: string): Promise<string | null> {
+    const key = this.config.get<string>('amap.key');
+    if (!key) throw new Error('未配置 AMAP_API_KEY');
+    // ip 为空时按调用方（本服务器）IP 定位，与其它兜底源行为一致
+    const data = await this.fetchJson(`https://restapi.amap.com/v3/ip?key=${key}&ip=${ip}`);
+    if (data?.status !== '1') throw new Error(`高德 IP 定位失败 infocode=${data?.infocode}`);
+    // 定位不到时 city/province 可能是空数组；仅识别到省时退回省级
+    const pick = (v: unknown) => (typeof v === 'string' && v ? v : '');
+    const raw = pick(data.city) || pick(data.province);
+    // 去掉行政区后缀（深圳市 → 深圳），便于和风城市搜索
+    return raw.replace(/(特别行政区|壮族自治区|回族自治区|维吾尔自治区|自治区|省|市)$/, '') || null;
+  }
+
   private async cityFromIpwho(ip: string): Promise<string | null> {
     const data = await this.fetchJson(`https://ipwho.is/${ip}`);
     if (!data?.success) return null;
@@ -316,6 +331,32 @@ export class WeatherService {
     );
     if (data?.status !== 'success') return null;
     return data.city || data.regionName || null;
+  }
+
+  /**
+   * 获取本机公网 IPv4 出口 IP。
+   * 出口优先走 IPv6 时，定位源会拿到归属地数据极差的 IPv6 地址（常被识别为北京），
+   * 因此固定走 IPv4-only 接口取 IPv4；多源兜底，全部失败返回空串，由定位源按调用方 IP 自行判断
+   */
+  private async resolveSelfIpv4(): Promise<string> {
+    const sources = [
+      'https://ddns.oray.com/checkip',
+      'http://members.3322.org/dyndns/getip',
+      'https://4.ipw.cn',
+    ];
+    for (const url of sources) {
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(UPSTREAM_TIMEOUT) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        // 各源返回格式不一（纯 IP 或一段文本），统一从响应中提取首个 IPv4
+        const ip = (await res.text()).match(/\d{1,3}(?:\.\d{1,3}){3}/)?.[0] ?? '';
+        if (ip) return ip;
+      } catch {
+        // 单源失败尝试下一个
+      }
+    }
+    this.logger.warn('获取本机公网 IPv4 失败：所有来源均不可用');
+    return '';
   }
 
   private isPrivateIp(ip: string): boolean {

@@ -19,6 +19,10 @@ export default () => ({
     // 旧版免费 key 使用 devapi.qweather.com
     host: process.env.QWEATHER_API_HOST ?? 'devapi.qweather.com',
   },
+  amap: {
+    // 高德开放平台 Key（Web 服务类型），用于 IP 定位；国内运营商 IP 比国外库准得多
+    key: process.env.AMAP_API_KEY ?? '',
+  },
   sites: {
     // 站点图标抓取失败时的兜底图：默认用前端的静态资源（相对前端源），也可配成完整 URL
     defaultIcon: process.env.SITE_DEFAULT_ICON ?? '/icons/_default.svg',

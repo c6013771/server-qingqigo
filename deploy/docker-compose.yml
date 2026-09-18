@@ -34,6 +34,9 @@ services:
     depends_on:
       - mysql
       - redis
+    volumes:
+      # 站点图标落盘目录持久化，避免容器重建丢图
+      - ./icons:/app/storage/icons
     ports:
       - "127.0.0.1:3000:3000"   # 只绑定本机回环，公网流量由 Nginx 反代进入
     networks:

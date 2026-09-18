@@ -27,6 +27,15 @@ export default () => ({
     // 站点图标抓取失败时的兜底图：默认用前端的静态资源（相对前端源），也可配成完整 URL
     defaultIcon: process.env.SITE_DEFAULT_ICON ?? '/icons/_default.svg',
   },
+  icons: {
+    // 站点图标落盘目录（容器内建议挂卷持久化）
+    dir: process.env.ICON_STORAGE_DIR ?? './storage/icons',
+    // 图标对外访问的绝对地址前缀（如 https://api.qingqier.com）；为空则返回相对路径
+    publicBase: process.env.ICON_PUBLIC_BASE_URL ?? '',
+    // 图标防盗链白名单（逗号分隔的域名，如 qingqier.com,www.qingqier.com）；
+    // 为空不限制；无 Referer 的直接访问始终放行
+    allowedReferers: process.env.ICON_ALLOWED_REFERERS ?? '',
+  },
   mail: {
     // SMTP 发信配置（QQ/163 邮箱用「授权码」而非登录密码，Gmail 用应用专用密码）
     host: process.env.SMTP_HOST ?? '',

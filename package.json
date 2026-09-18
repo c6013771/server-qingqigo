@@ -11,6 +11,8 @@
     "start:dev": "node --watch -r ts-node/register/transpile-only src/main.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "icons:localize": "node -r ts-node/register/transpile-only src/scripts/localize-icons.ts",
+    "icons:localize:prod": "node dist/scripts/localize-icons.js",
     "lint": "eslint \"src/**/*.ts\" --fix"
   },
   "dependencies": {

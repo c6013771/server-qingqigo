@@ -1,8 +1,8 @@
 import { BadRequestException, HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { lookup } from 'dns/promises';
-import * as net from 'net';
 import { RedisService } from '../../redis/redis.service';
+import { SiteIconsService } from './site-icons.service';
+import { assertPublicHost } from './ssrf';
 
 /** 站点元信息缓存 24 小时 */
 const CACHE_TTL = 86400;
@@ -30,6 +30,7 @@ export class SitesService {
   constructor(
     private redis: RedisService,
     private config: ConfigService,
+    private siteIcons: SiteIconsService,
   ) {}
 
   /** 抓取站点标题与图标；抓不到时用域名兜底，接口本身不失败 */
@@ -53,6 +54,11 @@ export class SitesService {
       finalOrigin = finalUrl.origin;
       title = this.parseTitle(html);
       icon = await this.pickValidIcon([this.parseIcon(html, finalOrigin), `${finalOrigin}/favicon.ico`]);
+      // 抓到有效远程图标后下载落盘，返回服务器本地地址；失败则保留远程地址降级
+      if (icon && !icon.startsWith('data:')) {
+        const local = await this.siteIcons.ensureLocalIcon(new URL(finalOrigin).hostname, icon);
+        if (local) icon = local;
+      }
     } catch (e) {
       this.logger.warn(`抓取站点信息失败 ${url.href}: ${(e as Error).message}`);
     }
@@ -100,52 +106,8 @@ export class SitesService {
     if (url.protocol !== 'http:' && url.protocol !== 'https:') {
       throw new BadRequestException('仅支持 http/https 网址');
     }
-    await this.assertPublicHost(url.hostname);
+    await assertPublicHost(url.hostname);
     return url;
-  }
-
-  /** 域名先解析成 IP 再校验，防 DNS 指向内网；IP 字面量直接校验 */
-  private async assertPublicHost(hostname: string): Promise<void> {
-    const host = hostname.toLowerCase();
-    if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) {
-      throw new BadRequestException('不支持访问内网地址');
-    }
-    let addresses: string[];
-    if (net.isIP(host)) {
-      addresses = [host];
-    } else {
-      try {
-        addresses = (await lookup(host, { all: true, verbatim: true })).map((r) => r.address);
-      } catch {
-        throw new BadRequestException('域名无法解析');
-      }
-    }
-    if (!addresses.length || addresses.some((a) => this.isPrivateIp(a))) {
-      throw new BadRequestException('不支持访问内网地址');
-    }
-  }
-
-  private isPrivateIp(ip: string): boolean {
-    const v6 = ip.toLowerCase();
-    if (v6.startsWith('::ffff:') && net.isIPv4(v6.slice(7))) return this.isPrivateIp(v6.slice(7));
-    if (
-      v6 === '::1' ||
-      v6 === '::' ||
-      v6.startsWith('fe80:') ||
-      v6.startsWith('fc') ||
-      v6.startsWith('fd')
-    ) {
-      return true;
-    }
-    return (
-      /^0\./.test(ip) ||
-      /^127\./.test(ip) ||
-      /^10\./.test(ip) ||
-      /^192\.168\./.test(ip) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(ip) ||
-      /^169\.254\./.test(ip) ||
-      /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip)
-    );
   }
 
   private async fetchHtml(url: URL): Promise<{ html: string; finalUrl: URL }> {
@@ -162,7 +124,7 @@ export class SitesService {
     if (finalUrl.protocol !== 'http:' && finalUrl.protocol !== 'https:') {
       throw new Error('重定向到不支持的协议');
     }
-    await this.assertPublicHost(finalUrl.hostname);
+    await assertPublicHost(finalUrl.hostname);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const type = res.headers.get('content-type') || '';
     if (type && !type.includes('text/html') && !type.includes('application/xhtml')) {
@@ -200,7 +162,7 @@ export class SitesService {
       try {
         const iconUrl = new URL(icon);
         if (iconUrl.protocol !== 'http:' && iconUrl.protocol !== 'https:') continue;
-        await this.assertPublicHost(iconUrl.hostname);
+        await assertPublicHost(iconUrl.hostname);
         let res = await fetch(icon, {
           method: 'HEAD',
           signal: AbortSignal.timeout(4000),

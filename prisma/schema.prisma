@@ -68,6 +68,23 @@ model UserNavSite {
   @@map("user_nav_sites")
 }
 
+/** 站点图标本地化缓存：按 host 全局去重，所有用户共享同一份落盘图标 */
+model SiteIcon {
+  id          String   @id @default(uuid())
+  /** 站点 host（最终 origin 的 hostname），全局去重键 */
+  host        String   @unique
+  /** 落盘文件名，如 docs.qq.com.png */
+  fileName    String   @map("file_name")
+  /** 原始远程图标地址，便于排查/后续刷新 */
+  sourceUrl   String   @map("source_url")
+  contentType String   @map("content_type")
+  sizeBytes   Int      @map("size_bytes")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("site_icons")
+}
+
 enum RequestType {
   ADD_SITE    @map("add_site")
   ADD_FEATURE @map("add_feature")

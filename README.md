@@ -79,6 +79,27 @@ npm start            # 运行编译产物
 
 服务默认监听 `http://localhost:3000/api`。
 
+## 站点图标本地化
+
+`/api/sites/meta` 抓到有效图标后会下载落盘到 `ICON_STORAGE_DIR`（默认 `./storage/icons`），
+按站点 host 去重存入 `site_icons` 表，所有用户共享同一份图标，不再依赖第三方图标链接。
+图标通过 `/site-icons/<host>.<ext>` 对外提供（静态目录，不受 `/api` 前缀影响，缓存 30 天）。
+
+- `ICON_PUBLIC_BASE_URL`：图标对外绝对地址前缀，生产环境建议配置为 API 域名（如 `https://api.qingqier.com`）；为空则返回相对路径
+- `ICON_ALLOWED_REFERERS`：图标防盗链白名单（逗号分隔域名，子域自动匹配，如 `qingqier.com` 覆盖 `www.qingqier.com`）；白名单外的站点引用返回 403；无 Referer 的直接访问始终放行；为空则不限制
+- 生产部署建议给 `storage/icons` 挂卷，避免容器重建丢图
+
+存量数据处理：部署新代码后执行一次回填脚本，把数据库里已有的外部图标链接下载到本地并改写记录：
+
+```bash
+npm run icons:localize        # 本地开发（ts-node 跑源码）
+# 生产环境（容器内跑编译产物，deploy/.env 需配好 ICON_PUBLIC_BASE_URL=https://api.qingqier.com）：
+docker exec qingqigo-server npm run icons:localize:prod
+```
+
+脚本幂等，可重复执行；已本地化的记录会跳过。生产环境图标的访问链路：
+浏览器 → EdgeOne → Nginx（api.qingqier.com 整域反代，含 /site-icons/）→ server 容器 → 卷 ./icons（deploy/docker-compose.yml 已挂载到 /app/storage/icons）。
+
 ## 接口文档
 
 启动服务后访问 Swagger UI：http://localhost:3000/api-docs

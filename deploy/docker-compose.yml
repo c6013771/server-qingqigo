@@ -49,6 +49,9 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    # host.docker.internal 指向宿主机：本地开发联调时，nginx 通过它访问宿主机的 SSH 隧道端口
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./web-dist:/usr/share/nginx/html:ro   # 前端构建产物（web-qingqigo 的 dist）

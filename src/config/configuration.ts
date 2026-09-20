@@ -44,4 +44,13 @@ export default () => ({
     pass: process.env.SMTP_PASS ?? '',
     from: process.env.MAIL_FROM ?? process.env.SMTP_USER ?? '',
   },
+  wechat: {
+    // 微信开放平台「网站应用」扫码登录（open.weixin.qq.com）
+    appId: process.env.WECHAT_APP_ID ?? '',
+    appSecret: process.env.WECHAT_APP_SECRET ?? '',
+    // 微信回调地址，必须与开放平台登记的「授权回调域」一致（后端处理 code 的入口）
+    redirectUri: process.env.WECHAT_REDIRECT_URI ?? '',
+    // 后端处理完成后跳回的前端回调页，用于把登录凭证交回浏览器
+    frontendCallback: process.env.WECHAT_FRONTEND_CALLBACK ?? '',
+  },
 });

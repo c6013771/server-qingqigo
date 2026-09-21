@@ -10,8 +10,6 @@ const CACHE_TTL = 86400;
 const FETCH_TIMEOUT = 8000;
 /** HTML 最多读取 2MB，防超大页面撑内存 */
 const MAX_HTML_BYTES = 2 * 1024 * 1024;
-/** 单 IP 每日最多抓取 100 次：接口公开可用，需防被当免费代理刷 */
-const IP_DAILY_LIMIT = 100;
 
 export interface SiteMeta {
   title: string;
@@ -34,8 +32,8 @@ export class SitesService {
   ) {}
 
   /** 抓取站点标题与图标；抓不到时用域名兜底，接口本身不失败 */
-  async getMeta(rawUrl: string, ip: string): Promise<SiteMeta & { cached: boolean }> {
-    await this.checkRateLimit(ip);
+  async getMeta(rawUrl: string, ip: string, opts?: { skipRateLimit?: boolean }): Promise<SiteMeta & { cached: boolean }> {
+    if (!opts?.skipRateLimit) await this.checkRateLimit(ip);
     const url = await this.normalizeAndCheck(rawUrl);
 
     const cacheKey = `sitemeta:${url.hostname}`;
@@ -81,10 +79,11 @@ export class SitesService {
 
   private async checkRateLimit(ip: string): Promise<void> {
     try {
+      const limit = this.config.get<number>('sites.ipDailyLimit', 500);
       const key = `sitemeta:ip:${ip}`;
       const count = await this.redis.incr(key);
       if (count === 1) await this.redis.expire(key, 86400);
-      if (count > IP_DAILY_LIMIT) {
+      if (count > limit) {
         throw new HttpException('请求太频繁，请明天再试', HttpStatus.TOO_MANY_REQUESTS);
       }
     } catch (e) {

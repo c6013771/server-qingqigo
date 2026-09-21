@@ -26,6 +26,8 @@ export default () => ({
   sites: {
     // 站点图标抓取失败时的兜底图：默认用前端的静态资源（相对前端源），也可配成完整 URL
     defaultIcon: process.env.SITE_DEFAULT_ICON ?? '/icons/_default.svg',
+    // /api/sites/meta 单 IP 每日抓取上限（防接口被当免费代理刷）
+    ipDailyLimit: parseInt(process.env.SITE_META_IP_DAILY_LIMIT ?? '500', 10),
   },
   icons: {
     // 站点图标落盘目录（容器内建议挂卷持久化）

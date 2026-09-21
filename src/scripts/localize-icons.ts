@@ -16,7 +16,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SiteIconsService } from '../modules/sites/site-icons.service';
 import { SitesService } from '../modules/sites/sites.service';
 
-/** 空图标回填时走抓取接口的固定来源标识（受每日 100 次限流约束） */
+/** 空图标回填时的来源标识（内部调用已跳过限流，仅作日志区分） */
 const SCRIPT_IP = 'icons-localize-script';
 
 interface Row {
@@ -47,7 +47,7 @@ async function backfill(
     try {
       // icon 为空：实时抓取站点信息（内部已做本地化落盘），成功则写回
       if (!icon) {
-        const meta = await sites.getMeta(row.url, SCRIPT_IP);
+        const meta = await sites.getMeta(row.url, SCRIPT_IP, { skipRateLimit: true });
         if (!meta.iconDefault && /^https?:\/\//i.test(meta.icon)) {
           await delegate.update({ where: { id: row.id }, data: { icon: meta.icon } });
           filled++;

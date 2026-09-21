@@ -9,8 +9,23 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { email } });
   }
 
+  findByWxOpenid(wxOpenid: string) {
+    return this.prisma.user.findUnique({ where: { wxOpenid } });
+  }
+
   findById(id: string) {
     return this.prisma.user.findUnique({ where: { id } });
+  }
+
+  /** 微信扫码登录：按 openid 创建新用户（无邮箱/密码） */
+  createWithWechat(data: { wxOpenid: string; nickname?: string; avatarUrl?: string }) {
+    return this.prisma.user.create({
+      data: {
+        wxOpenid: data.wxOpenid,
+        nickname: data.nickname ?? '微信用户',
+        avatarUrl: data.avatarUrl,
+      },
+    });
   }
 
   /** 注册创建用户，昵称缺省取邮箱前缀 */

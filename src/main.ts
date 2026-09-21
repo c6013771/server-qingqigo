@@ -17,9 +17,18 @@ async function bootstrap() {
   // 站点图标静态目录：useStaticAssets 作用在 express 层，不受全局 /api 前缀影响
   const iconDirCfg = config.get<string>('icons.dir', './storage/icons');
   // 图标防盗链：配置了白名单后，仅白名单域名的页面可引用图标；无 Referer 的直接访问放行
+  // 配置项容忍写成完整 URL（如 https://www.qingqier.com），统一归一化为纯域名再比对
   const allowedReferers = (config.get<string>('icons.allowedReferers', '') as string)
     .split(',')
-    .map((s) => s.trim().toLowerCase())
+    .map((s) => {
+      const v = s.trim().toLowerCase().replace(/\/+$/, '');
+      if (!v) return '';
+      try {
+        return new URL(v.includes('://') ? v : `https://${v}`).hostname;
+      } catch {
+        return v;
+      }
+    })
     .filter(Boolean);
   if (allowedReferers.length) {
     app.use('/site-icons', (req: Request, res: Response, next: NextFunction) => {

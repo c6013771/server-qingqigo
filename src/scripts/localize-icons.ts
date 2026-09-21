@@ -3,7 +3,8 @@
  * - icon 为空 → 调 SitesService 实时抓取并本地化，写回记录；
  * - icon 是外部 http(s) 链接 → 下载落盘到服务器（按站点 host 去重），记录改成本地地址；
  * - icon 是相对路径 /site-icons/... → 补上 ICON_PUBLIC_BASE_URL 前缀（若已配置）；
- * - 已是本地地址 / data: URI / 前端资源路径（/icons/...）→ 跳过。
+ * - 已是本地地址 → 校验文件仍在磁盘上，丢失则按 sourceUrl 重新下载；
+ * - data: URI / 前端资源路径（/icons/...）→ 跳过。
  *
  * 本地开发：npm run icons:localize（ts-node 直接跑源码）
  * 生产容器：docker exec qingqigo-server npm run icons:localize:prod（跑编译产物）
@@ -73,9 +74,14 @@ async function backfill(
         }
         continue;
       }
-      // 已是本服务的绝对地址，跳过
+      // 已是本服务的绝对地址：校验文件仍在磁盘上，丢失则按 sourceUrl 重新下载
       if (publicBase && icon.startsWith(publicBase)) {
-        skipped++;
+        if (await siteIcons.repairLocalIcon(icon)) {
+          skipped++;
+        } else {
+          failed++;
+          console.warn(`[本地文件缺失且无法重下] ${row.name}: ${icon}`);
+        }
         continue;
       }
       if (!/^https?:\/\//i.test(icon)) {

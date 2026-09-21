@@ -116,6 +116,25 @@ export class SiteIconsService implements OnModuleInit {
     return this.publicUrl(fileName);
   }
 
+  /**
+   * 校验已本地化的图标地址：文件在磁盘上则原样返回；
+   * 文件丢失（如容器重建且未挂载持久卷）按 siteIcon 表里的 sourceUrl 重新下载；无法修复返回 null。
+   */
+  async repairLocalIcon(iconUrl: string): Promise<string | null> {
+    try {
+      const m = iconUrl.match(/\/site-icons\/([^/]+)$/);
+      if (!m) return null;
+      const host = m[1].replace(/\.[^.]+$/, '');
+      const rec = await this.prisma.siteIcon.findUnique({ where: { host } });
+      if (!rec) return null;
+      if (existsSync(join(this.dir, rec.fileName))) return iconUrl;
+      return await this.download(host, rec.sourceUrl, rec.fileName);
+    } catch (e) {
+      this.logger.warn(`图标修复失败 ${iconUrl}: ${(e as Error).message}`);
+      return null;
+    }
+  }
+
   private publicUrl(fileName: string): string {
     return `${this.publicBase}/site-icons/${fileName}`;
   }

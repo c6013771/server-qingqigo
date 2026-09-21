@@ -27,7 +27,9 @@ services:
 
   server:
     build:
-      context: ..   # server-qingqigo 项目根目录（Dockerfile 所在处）
+      # 默认 .. 适用于仓库内使用（deploy/ 上一级即项目根目录）；
+      # 服务器上 compose 文件在独立编排目录，由部署脚本注入 SERVER_BUILD_CONTEXT 指向后端仓库
+      context: ${SERVER_BUILD_CONTEXT:-..}
     container_name: qingqigo-server
     restart: unless-stopped
     env_file: .env

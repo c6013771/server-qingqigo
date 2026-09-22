@@ -17,6 +17,7 @@ model User {
   nickname     String?
   avatarUrl    String?         @map("avatar_url")
   role         String          @default("user")
+  navVersion   Int             @default(0) @map("nav_version")
   createdAt    DateTime        @default(now()) @map("created_at")
   lastLoginAt  DateTime?       @map("last_login_at")
   favorites    UserFavorite[]

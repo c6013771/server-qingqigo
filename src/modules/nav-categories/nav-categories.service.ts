@@ -5,7 +5,7 @@ import { CreateNavCategoryDto } from './dto/create-nav-category.dto';
 import { UpdateNavCategoryDto } from './dto/update-nav-category.dto';
 import { CreateNavSiteDto } from './dto/create-nav-site.dto';
 import { UpdateNavSiteDto } from './dto/update-nav-site.dto';
-import { defaultNavCategories } from './default-categories';
+import { defaultNavCategories, NAV_DEFAULTS_VERSION } from './default-categories';
 
 /** 自定义导航分类数量上限 */
 const MAX_CATEGORIES = 9;
@@ -21,6 +21,7 @@ export class NavCategoriesService {
 
   async list(userId: string) {
     await this.seedBuiltinCategories(userId);
+    await this.mergeBuiltinUpdates(userId);
     return this.prisma.userNavCategory.findMany({
       where: { userId },
       // sortOrder 由拖插排序接口统一重写；初始数据经迁移脚本排为「内置在前」
@@ -57,14 +58,98 @@ export class NavCategoriesService {
             isBuiltin: true,
             sortOrder: i,
             sites: {
-              create: cat.sites.map((s, j) => ({ ...s, sortOrder: j })),
+              create: cat.sites.map((s, j) => ({ name: s.name, url: s.url, desc: s.desc, sortOrder: j })),
             },
           },
         });
       }
+      await this.prisma.user.update({ where: { id: userId }, data: { navVersion: NAV_DEFAULTS_VERSION } });
     } finally {
       await this.redis.del(lockKey);
     }
+  }
+
+  /**
+   * 内置分类的增量合并（只加不删）：
+   * 服务端默认数据版本高于用户 navVersion 时，把 since > 用户版本的新分类整个补入、
+   * 新网站补进同名内置分类；用户的重命名/删除/排序/自定义一律不动。
+   * 合并失败不影响列表返回，下次请求会重试。
+   */
+  private async mergeBuiltinUpdates(userId: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { navVersion: true } });
+    const userVersion = user?.navVersion ?? 0;
+    if (userVersion >= NAV_DEFAULTS_VERSION) return;
+
+    const lockKey = `nav:merge:${userId}`;
+    const locked = await this.redis.getClient().set(lockKey, '1', 'EX', 30, 'NX');
+    if (!locked) return; // 并发请求正在合并，本次跳过（数据最终一致）
+    try {
+      const builtinCats = await this.prisma.userNavCategory.findMany({
+        where: { userId, isBuiltin: true },
+        include: { sites: { select: { url: true } } },
+      });
+      let sortOrder = await this.prisma.userNavCategory.count({ where: { userId } });
+
+      for (const cat of defaultNavCategories) {
+        const catSince = cat.since ?? 0;
+        const existing = builtinCats.find((c) => c.label === cat.label);
+
+        // 新增分类：用户没有同名内置分类才补入（用户主动删过的旧分类 since 低，不会复活）
+        if (!existing) {
+          if (catSince <= userVersion) continue;
+          await this.prisma.userNavCategory.create({
+            data: {
+              userId,
+              label: cat.label,
+              isBuiltin: true,
+              sortOrder: sortOrder++,
+              sites: { create: cat.sites.map((s, j) => ({ name: s.name, url: s.url, desc: s.desc, sortOrder: j })) },
+            },
+          });
+          continue;
+        }
+
+        // 已有分类：只补 since 高于用户版本、且用户没有同 URL 的网站
+        const existingUrls = new Set(existing.sites.map((s) => s.url));
+        const newSites = cat.sites.filter((s) => (s.since ?? 0) > userVersion && !existingUrls.has(s.url));
+        if (!newSites.length) continue;
+        let siteOrder = await this.prisma.userNavSite.count({ where: { categoryId: existing.id } });
+        for (const s of newSites) {
+          await this.prisma.userNavSite.create({
+            data: { categoryId: existing.id, name: s.name, url: s.url, desc: s.desc, sortOrder: siteOrder++ },
+          });
+        }
+      }
+
+      await this.prisma.user.update({ where: { id: userId }, data: { navVersion: NAV_DEFAULTS_VERSION } });
+    } catch {
+      // 合并失败下次列表请求重试，不阻断本次返回
+    } finally {
+      await this.redis.del(lockKey);
+    }
+  }
+
+  /** 恢复内置分类为当前默认数据：删除全部内置副本后重新播种，自定义分类不动 */
+  async resetBuiltinCategories(userId: string) {
+    await this.prisma.userNavCategory.deleteMany({ where: { userId, isBuiltin: true } });
+    const customs = await this.prisma.userNavCategory.findMany({ where: { userId }, select: { id: true } });
+    // 自定义分类的顺序往前顺移，内置分类重新从 0 排
+    for (const [i, c] of customs.entries()) {
+      await this.prisma.userNavCategory.update({ where: { id: c.id }, data: { sortOrder: i } });
+    }
+    for (const [i, cat] of defaultNavCategories.entries()) {
+      await this.prisma.userNavCategory.create({
+        data: {
+          userId,
+          label: cat.label,
+          isBuiltin: true,
+          sortOrder: customs.length + i,
+          sites: { create: cat.sites.map((s, j) => ({ name: s.name, url: s.url, desc: s.desc, sortOrder: j })) },
+        },
+      });
+    }
+    await this.prisma.user.update({ where: { id: userId }, data: { navVersion: NAV_DEFAULTS_VERSION } });
+    return this.list(userId);
   }
 
   async createCategory(userId: string, dto: CreateNavCategoryDto) {

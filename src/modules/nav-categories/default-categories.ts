@@ -1,15 +1,28 @@
 /**
  * 系统内置分类导航（与前端 src/data/sites.ts 的 categories 保持一致）。
  * 用户首次拉取分类时初始化为该用户的一份副本（isBuiltin=true），之后可自由编辑/删除，互不影响。
+ *
+ * 版本机制（只加不删的增量合并）：
+ * - NAV_DEFAULTS_VERSION 在每次修改默认分类后递增（用日期数字，如 20260922）；
+ * - 用户表 nav_version 记录其数据版本，GET 列表时对 since > 用户版本的分类/网站做合并；
+ * - 新增分类/网站必须标 since = 新版本号；修改/删除既有条目不需要标（不会影响用户副本）。
  */
+
+/** 默认分类数据版本：每次增删分类/网站后更新为当天日期数字 */
+export const NAV_DEFAULTS_VERSION = 20260922;
+
 export interface DefaultNavSite {
   name: string;
   url: string;
   desc?: string;
+  /** 该网站加入默认数据的版本号；存量条目为 undefined（视为 0） */
+  since?: number;
 }
 
 export interface DefaultNavCategory {
   label: string;
+  /** 该分类加入默认数据的版本号；存量分类为 undefined（视为 0） */
+  since?: number;
   sites: DefaultNavSite[];
 }
 
@@ -22,9 +35,9 @@ export const defaultNavCategories: DefaultNavCategory[] = [
       { name: '豆包', url: 'https://www.doubao.com', desc: 'AI 助手' },
       { name: '通义千问', url: 'https://www.tongyi.com', desc: 'AI 助手' },
       { name: '腾讯元宝', url: 'https://yuanbao.tencent.com', desc: 'AI 助手' },
-      { name: '文小言', url: 'https://yiyan.baidu.com', desc: 'AI 助手' },
-      { name: '智谱清言', url: 'https://chatglm.cn', desc: 'AI 助手' },
-      { name: '讯飞星火', url: 'https://xinghuo.xfyun.cn', desc: 'AI 助手' },
+      { name: '文小言', url: 'https://yiyan.baidu.com', desc: 'AI 助手', since: 20260922 },
+      { name: '智谱清言', url: 'https://chatglm.cn', desc: 'AI 助手', since: 20260922 },
+      { name: '讯飞星火', url: 'https://xinghuo.xfyun.cn', desc: 'AI 助手', since: 20260922 },
     ],
   },
   {
@@ -34,7 +47,7 @@ export const defaultNavCategories: DefaultNavCategory[] = [
       { name: '优酷', url: 'https://youku.com', desc: '视频' },
       { name: '爱奇艺', url: 'https://www.iqiyi.com', desc: '视频' },
       { name: '腾讯视频', url: 'https://v.qq.com', desc: '视频' },
-      { name: '芒果TV', url: 'https://www.mgtv.com', desc: '视频' },
+      { name: '芒果TV', url: 'https://www.mgtv.com', desc: '视频', since: 20260922 },
       { name: '抖音', url: 'https://www.douyin.com', desc: '短视频' },
       { name: '快手', url: 'https://www.kuaishou.com', desc: '短视频' },
     ],
@@ -46,12 +59,13 @@ export const defaultNavCategories: DefaultNavCategory[] = [
       { name: 'QQ音乐', url: 'https://y.qq.com', desc: '音乐' },
       { name: '酷狗音乐', url: 'https://www.kugou.com', desc: '音乐' },
       { name: '酷我音乐', url: 'https://www.kuwo.cn', desc: '音乐' },
-      { name: '咪咕音乐', url: 'https://music.migu.cn', desc: '音乐' },
+      { name: '咪咕音乐', url: 'https://music.migu.cn', desc: '音乐', since: 20260922 },
       { name: 'Apple Music', url: 'https://music.apple.com', desc: '音乐' },
     ],
   },
   {
     label: '购物',
+    since: 20260922,
     sites: [
       { name: '淘宝', url: 'https://www.taobao.com', desc: '网购' },
       { name: '京东', url: 'https://www.jd.com', desc: '网购' },
@@ -63,6 +77,7 @@ export const defaultNavCategories: DefaultNavCategory[] = [
   },
   {
     label: '出行',
+    since: 20260922,
     sites: [
       { name: '携程', url: 'https://www.ctrip.com', desc: '机酒火车票' },
       { name: '12306', url: 'https://www.12306.cn', desc: '火车票' },
@@ -76,10 +91,10 @@ export const defaultNavCategories: DefaultNavCategory[] = [
     label: '办公',
     sites: [
       { name: '腾讯文档', url: 'https://docs.qq.com', desc: '在线文档' },
-      { name: '钉钉', url: 'https://www.dingtalk.com', desc: '协作办公' },
-      { name: '企业微信', url: 'https://work.weixin.qq.com', desc: '协作办公' },
+      { name: '钉钉', url: 'https://www.dingtalk.com', desc: '协作办公', since: 20260922 },
+      { name: '企业微信', url: 'https://work.weixin.qq.com', desc: '协作办公', since: 20260922 },
       { name: '石墨文档', url: 'https://shimo.im', desc: '在线文档' },
-      { name: '语雀', url: 'https://www.yuque.com', desc: '知识库' },
+      { name: '语雀', url: 'https://www.yuque.com', desc: '知识库', since: 20260922 },
       { name: 'WPS', url: 'https://www.wps.cn', desc: '办公套件' },
       { name: '飞书', url: 'https://www.feishu.cn', desc: '协作办公' },
       { name: '腾讯会议', url: 'https://meeting.tencent.com', desc: '视频会议' },
@@ -90,8 +105,8 @@ export const defaultNavCategories: DefaultNavCategory[] = [
     sites: [
       { name: 'QQ邮箱', url: 'https://mail.qq.com', desc: '邮箱' },
       { name: '163邮箱', url: 'https://mail.163.com', desc: '邮箱' },
-      { name: '126邮箱', url: 'https://mail.126.com', desc: '邮箱' },
-      { name: '139邮箱', url: 'https://mail.10086.cn', desc: '邮箱' },
+      { name: '126邮箱', url: 'https://mail.126.com', desc: '邮箱', since: 20260922 },
+      { name: '139邮箱', url: 'https://mail.10086.cn', desc: '邮箱', since: 20260922 },
       { name: 'Outlook', url: 'https://outlook.live.com', desc: '邮箱' },
       { name: '新浪邮箱', url: 'https://mail.sina.com.cn', desc: '邮箱' },
       { name: '阿里云邮箱', url: 'https://mail.aliyun.com', desc: '邮箱' },
@@ -99,6 +114,7 @@ export const defaultNavCategories: DefaultNavCategory[] = [
   },
   {
     label: '工具',
+    since: 20260922,
     sites: [
       { name: '百度网盘', url: 'https://pan.baidu.com', desc: '网盘' },
       { name: '夸克网盘', url: 'https://pan.quark.cn', desc: '网盘' },
@@ -112,12 +128,12 @@ export const defaultNavCategories: DefaultNavCategory[] = [
     sites: [
       { name: '今日头条', url: 'https://www.toutiao.com', desc: '新闻' },
       { name: '澎湃新闻', url: 'https://www.thepaper.cn', desc: '新闻' },
-      { name: '人民网', url: 'https://www.people.com.cn', desc: '新闻' },
+      { name: '人民网', url: 'https://www.people.com.cn', desc: '新闻', since: 20260922 },
       { name: '新浪新闻', url: 'https://news.sina.com.cn', desc: '新闻' },
       { name: '网易新闻', url: 'https://news.163.com', desc: '新闻' },
       { name: '凤凰新闻', url: 'https://news.ifeng.com', desc: '新闻' },
       { name: '腾讯新闻', url: 'https://news.qq.com', desc: '新闻' },
-      { name: '36氪', url: 'https://36kr.com', desc: '科技资讯' },
+      { name: '36氪', url: 'https://36kr.com', desc: '科技资讯', since: 20260922 },
     ],
   },
   {
@@ -125,7 +141,7 @@ export const defaultNavCategories: DefaultNavCategory[] = [
     sites: [
       { name: '东方财富', url: 'https://www.eastmoney.com', desc: '财经' },
       { name: '雪球', url: 'https://xueqiu.com', desc: '投资社区' },
-      { name: '天天基金', url: 'https://fund.eastmoney.com', desc: '基金' },
+      { name: '天天基金', url: 'https://fund.eastmoney.com', desc: '基金', since: 20260922 },
       { name: '财新', url: 'https://www.caixin.com', desc: '财经新闻' },
       { name: '华尔街见闻', url: 'https://wallstreetcn.com', desc: '财经资讯' },
       { name: '新浪财经', url: 'https://finance.sina.com.cn', desc: '财经' },
@@ -136,10 +152,10 @@ export const defaultNavCategories: DefaultNavCategory[] = [
     label: '知识',
     sites: [
       { name: '知乎', url: 'https://www.zhihu.com', desc: '问答社区' },
-      { name: '微信读书', url: 'https://weread.qq.com', desc: '阅读' },
+      { name: '微信读书', url: 'https://weread.qq.com', desc: '阅读', since: 20260922 },
       { name: '得到', url: 'https://www.dedao.cn', desc: '知识服务' },
       { name: '豆瓣', url: 'https://www.douban.com', desc: '书影音' },
-      { name: '中国大学MOOC', url: 'https://www.icourse163.org', desc: '在线课程' },
+      { name: '中国大学MOOC', url: 'https://www.icourse163.org', desc: '在线课程', since: 20260922 },
       { name: '简书', url: 'https://www.jianshu.com', desc: '创作社区' },
       { name: 'CSDN', url: 'https://www.csdn.net', desc: '技术社区' },
       { name: 'GitHub', url: 'https://github.com', desc: '代码托管' },
@@ -150,7 +166,7 @@ export const defaultNavCategories: DefaultNavCategory[] = [
     sites: [
       { name: '小红书', url: 'https://www.xiaohongshu.com', desc: '生活分享' },
       { name: '微博', url: 'https://weibo.com', desc: '社交' },
-      { name: '百度贴吧', url: 'https://tieba.baidu.com', desc: '兴趣社区' },
+      { name: '百度贴吧', url: 'https://tieba.baidu.com', desc: '兴趣社区', since: 20260922 },
       { name: '抖音', url: 'https://www.douyin.com', desc: '短视频' },
       { name: '即刻', url: 'https://web.okjike.com', desc: '兴趣社区' },
       { name: '虎扑', url: 'https://www.hupu.com', desc: '体育社区' },

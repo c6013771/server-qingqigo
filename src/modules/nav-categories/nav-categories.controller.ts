@@ -29,6 +29,12 @@ export class NavCategoriesController {
     return this.navCategories.createCategory(user.id, dto);
   }
 
+  @ApiOperation({ summary: '恢复默认分类导航：重置内置分类副本为当前默认数据' })
+  @Post('reset-builtin')
+  resetBuiltin(@CurrentUser() user: AuthUser) {
+    return this.navCategories.resetBuiltinCategories(user.id);
+  }
+
   // 注意：必须在 @Patch(':id') 之前声明，否则 order 会被当作 :id 匹配
   @ApiOperation({ summary: '拖拽排序：按提交顺序重排全部分类' })
   @Patch('order')

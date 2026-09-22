@@ -39,6 +39,17 @@ export class UsersService {
     });
   }
 
+  /** 微信扫码登录后异步回填昵称与头像（仅更新有值的字段） */
+  updateWechatProfile(id: string, data: { nickname?: string; avatarUrl?: string }) {
+    return this.prisma.user.update({
+      where: { id },
+      data: {
+        ...(data.nickname ? { nickname: data.nickname } : {}),
+        ...(data.avatarUrl ? { avatarUrl: data.avatarUrl } : {}),
+      },
+    });
+  }
+
   touchLastLogin(id: string) {
     return this.prisma.user.update({ where: { id }, data: { lastLoginAt: new Date() } });
   }

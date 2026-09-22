@@ -55,4 +55,10 @@ export default () => ({
     // 后端处理完成后跳回的前端回调页，用于把登录凭证交回浏览器
     frontendCallback: process.env.WECHAT_FRONTEND_CALLBACK ?? '',
   },
+  avatars: {
+    // 用户头像落盘目录（容器内建议挂卷持久化）
+    dir: process.env.AVATAR_STORAGE_DIR ?? './storage/avatars',
+    // 头像对外访问的绝对地址前缀（如 https://api.qingqier.com）；为空则不本地化，保留第三方外链
+    publicBase: process.env.AVATAR_PUBLIC_BASE_URL ?? '',
+  },
 });

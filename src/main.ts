@@ -49,6 +49,13 @@ async function bootstrap() {
     maxAge: '30d',
     immutable: true,
   });
+  // 用户头像静态目录：文件名带时间戳版本号，可安全长缓存
+  const avatarDirCfg = config.get<string>('avatars.dir', './storage/avatars');
+  app.useStaticAssets(isAbsolute(avatarDirCfg) ? avatarDirCfg : resolve(process.cwd(), avatarDirCfg), {
+    prefix: '/avatars/',
+    maxAge: '30d',
+    immutable: true,
+  });
   // CORS：只允许自己的前端域名跨域调用（本地开发保留 Astro 默认端口）
   app.enableCors({
     origin: [

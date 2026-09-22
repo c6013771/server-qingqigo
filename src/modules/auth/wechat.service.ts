@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { randomBytes } from 'crypto';
 import { Response } from 'express';
+import { mkdir, writeFile } from 'fs/promises';
+import { isAbsolute, join, resolve } from 'path';
 import { RedisService } from '../../redis/redis.service';
 import { UsersService } from '../users/users.service';
 
@@ -98,9 +100,10 @@ export class WechatService {
       return;
     }
 
-    const userInfo = await this.fetchUserInfo(tokenRes.access_token, tokenRes.openid);
-
-    const user = await this.ensureUser(tokenRes.openid, userInfo);
+    // 关键路径只依赖 openid：老用户不再调 sns/userinfo（其结果原本也未被使用），
+    // 新用户先用默认资料建号，昵称头像异步回填，缩短回调耗时
+    const { user, isNew } = await this.ensureUser(tokenRes.openid);
+    if (isNew) void this.syncWechatProfile(user.id, tokenRes.access_token, tokenRes.openid);
 
     // 用一次性 ticket 承载 JWT，避免把 token 直接放在重定向 URL 里
     const ticket = randomBytes(16).toString('hex');
@@ -174,21 +177,67 @@ export class WechatService {
     }
   }
 
-  /** 按 openid 查找用户，不存在则创建；返回用户记录 */
-  private async ensureUser(openid: string, info: WechatUserInfo) {
+  /** 按 openid 查找用户，不存在则以默认资料创建；返回用户记录与是否新建 */
+  private async ensureUser(openid: string): Promise<{ user: { id: string; email: string | null; nickname: string | null; role: string; avatarUrl: string | null }; isNew: boolean }> {
     const existing = await this.users.findByWxOpenid(openid);
     if (existing) {
       await this.users.touchLastLogin(existing.id);
-      return existing;
+      return { user: existing, isNew: false };
     }
 
-    const created = await this.users.createWithWechat({
-      wxOpenid: openid,
-      nickname: info.nickname || undefined,
-      avatarUrl: info.headimgurl || undefined,
-    });
+    const created = await this.users.createWithWechat({ wxOpenid: openid });
     await this.users.touchLastLogin(created.id);
-    return created;
+    return { user: created, isNew: true };
+  }
+
+  /** 新用户首次登录后异步回填微信昵称与头像；失败仅记日志，不影响登录 */
+  private async syncWechatProfile(userId: string, accessToken: string, openid: string): Promise<void> {
+    try {
+      const info = await this.fetchUserInfo(accessToken, openid);
+      if (!info.nickname && !info.headimgurl) return;
+      // 头像优先转存到本服务（微信 CDN 外链有防盗链 403、用户换头像后失效的风险）；转存失败退回外链
+      let avatarUrl: string | undefined;
+      if (info.headimgurl) {
+        avatarUrl = (await this.localizeAvatar(userId, info.headimgurl)) ?? info.headimgurl;
+      }
+      await this.users.updateWechatProfile(userId, {
+        nickname: info.nickname,
+        avatarUrl,
+      });
+    } catch (err) {
+      console.error('异步回填微信用户资料失败:', err);
+    }
+  }
+
+  /** 下载微信头像到本地静态目录，返回对外访问地址；未配置 avatars.publicBase 或下载失败返回 null */
+  private async localizeAvatar(userId: string, remoteUrl: string): Promise<string | null> {
+    const publicBase = this.config.get<string>('avatars.publicBase', '').replace(/\/+$/, '');
+    if (!publicBase) return null;
+    try {
+      const res = await fetch(remoteUrl, {
+        signal: AbortSignal.timeout(8000),
+        redirect: 'follow',
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; QingQiEr/1.0)' },
+      });
+      if (!res.ok) return null;
+      const type = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+      const ext = ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' } as Record<string, string>)[type];
+      if (!ext) return null;
+      const buf = Buffer.from(await res.arrayBuffer());
+      // 头像正常只有几十 KB，超过 5MB 视为异常响应
+      if (!buf.length || buf.length > 5 * 1024 * 1024) return null;
+
+      const dirCfg = this.config.get<string>('avatars.dir', './storage/avatars');
+      const dir = isAbsolute(dirCfg) ? dirCfg : resolve(process.cwd(), dirCfg);
+      await mkdir(dir, { recursive: true });
+      // 文件名带时间戳版本号：配合长缓存，用户更换头像不会产生脏缓存
+      const fileName = `${userId}-${Date.now()}.${ext}`;
+      await writeFile(join(dir, fileName), buf);
+      return `${publicBase}/avatars/${fileName}`;
+    } catch (err) {
+      console.error('微信头像转存失败:', err);
+      return null;
+    }
   }
 
   /** 签发 JWT 并返回基础用户信息（与邮箱登录返回结构保持一致） */

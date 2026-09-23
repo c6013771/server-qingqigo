@@ -45,6 +45,8 @@ export default () => ({
     user: process.env.SMTP_USER ?? '',
     pass: process.env.SMTP_PASS ?? '',
     from: process.env.MAIL_FROM ?? process.env.SMTP_USER ?? '',
+    // 运营通知收件箱：用户提交反馈时向该邮箱发通知邮件；为空则不通知
+    notifyEmail: process.env.MAIL_NOTIFY_EMAIL ?? '',
   },
   wechat: {
     // 微信开放平台「网站应用」扫码登录（open.weixin.qq.com）

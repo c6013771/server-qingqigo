@@ -13,6 +13,7 @@ import { HotListsModule } from './modules/hot-lists/hot-lists.module';
 import { WeatherModule } from './modules/weather/weather.module';
 import { SitesModule } from './modules/sites/sites.module';
 import { NavCategoriesModule } from './modules/nav-categories/nav-categories.module';
+import { FeedbacksModule } from './modules/feedbacks/feedbacks.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { NavCategoriesModule } from './modules/nav-categories/nav-categories.mod
     WeatherModule,
     SitesModule,
     NavCategoriesModule,
+    FeedbacksModule,
   ],
 })
 export class AppModule {}

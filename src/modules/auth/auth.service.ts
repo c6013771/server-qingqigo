@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { UsersService } from '../users/users.service';
@@ -22,6 +22,8 @@ type CodeScene = 'verify' | 'reset';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private users: UsersService,
     private jwt: JwtService,
@@ -142,6 +144,8 @@ export class AuthService {
       throw err;
     }
     await this.redis.set(`${scene}:${email}`, code, CODE_TTL);
+    // 验证码落日志便于排查「收不到邮件」类问题；注意：能访问服务器日志即可登他人账号，稳定后建议移除
+    this.logger.log(`验证码已发送：${email}（${scene}）=> ${code}`);
     return { sent: true };
   }
 

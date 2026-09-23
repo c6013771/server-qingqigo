@@ -24,6 +24,7 @@ model User {
   requests     FeatureRequest[]
   votes        RequestVote[]
   navCategories UserNavCategory[]
+  feedbacks    Feedback[]
 
   @@map("users")
 }
@@ -132,4 +133,25 @@ model RequestVote {
 
   @@unique([requestId, userId])
   @@map("request_votes")
+}
+
+/** 用户意见反馈（前端「意见反馈」弹窗；type/status 存小写字符串，与前端契约一致） */
+model Feedback {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  /** feature 功能建议 / bug 问题反馈 / site 站点收录 */
+  type         String   @db.VarChar(20)
+  content      String   @db.VarChar(1000)
+  /** 用户预留的联系邮箱，便于回复通知 */
+  contactEmail String?  @map("contact_email") @db.VarChar(100)
+  /** pending 待处理 / processing 处理中 / replied 已回复 / done 已完成 / rejected 已拒绝 */
+  status       String   @default("pending") @db.VarChar(20)
+  /** 管理员回复内容 */
+  reply        String?  @db.VarChar(2000)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("feedbacks")
 }

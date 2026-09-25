@@ -11,6 +11,10 @@ import { defaultNavCategories, NAV_DEFAULTS_VERSION } from './default-categories
 const MAX_CATEGORIES = 9;
 /** 每个分类下的网站数量上限 */
 const MAX_SITES_PER_CATEGORY = 9;
+/** 导航列表缓存 5 分钟：数据个人化且写操作主动失效，命中可完全绕过 DB */
+const LIST_CACHE_TTL = 300;
+/** 导航列表缓存键 */
+const listCacheKey = (userId: string) => `nav:list:${userId}`;
 
 @Injectable()
 export class NavCategoriesService {
@@ -20,14 +24,37 @@ export class NavCategoriesService {
   ) {}
 
   async list(userId: string) {
+    // 优先读缓存：首页高频接口，命中直接返回，省去 seed/merge/findMany 全部 DB 与 Redis 往返
+    try {
+      const cached = await this.redis.get(listCacheKey(userId));
+      if (cached) return JSON.parse(cached);
+    } catch {
+      // Redis 不可用则走 DB，不影响主流程
+    }
+
     await this.seedBuiltinCategories(userId);
     await this.mergeBuiltinUpdates(userId);
-    return this.prisma.userNavCategory.findMany({
+    const data = await this.prisma.userNavCategory.findMany({
       where: { userId },
       // sortOrder 由拖插排序接口统一重写；初始数据经迁移脚本排为「内置在前」
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       include: { sites: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] } },
     });
+    try {
+      await this.redis.set(listCacheKey(userId), JSON.stringify(data), LIST_CACHE_TTL);
+    } catch {
+      // 缓存失败不影响返回
+    }
+    return data;
+  }
+
+  /** 写操作后使列表缓存失效，保证下一次 list 拉取到最新数据 */
+  private async invalidateCache(userId: string): Promise<void> {
+    try {
+      await this.redis.del(listCacheKey(userId));
+    } catch {
+      // 忽略缓存失效失败
+    }
   }
 
   /**
@@ -149,6 +176,7 @@ export class NavCategoriesService {
       });
     }
     await this.prisma.user.update({ where: { id: userId }, data: { navVersion: NAV_DEFAULTS_VERSION } });
+    await this.invalidateCache(userId);
     return this.list(userId);
   }
 
@@ -159,9 +187,11 @@ export class NavCategoriesService {
     }
     // 追加到全部分类末尾（含内置副本），保证 sortOrder 连续递增
     const total = await this.prisma.userNavCategory.count({ where: { userId } });
-    return this.prisma.userNavCategory.create({
+    const created = await this.prisma.userNavCategory.create({
       data: { ...dto, userId, sortOrder: total },
     });
+    await this.invalidateCache(userId);
+    return created;
   }
 
   /** 拖插排序：按提交的 id 顺序重写 sortOrder；要求提交的 id 恰好是用户的全部分类 */
@@ -174,17 +204,21 @@ export class NavCategoriesService {
     await this.prisma.$transaction(
       ids.map((id, i) => this.prisma.userNavCategory.update({ where: { id }, data: { sortOrder: i } })),
     );
+    await this.invalidateCache(userId);
     return { sorted: true };
   }
 
   async updateCategory(id: string, userId: string, dto: UpdateNavCategoryDto) {
     await this.findOwnedCategory(id, userId);
-    return this.prisma.userNavCategory.update({ where: { id }, data: dto });
+    const updated = await this.prisma.userNavCategory.update({ where: { id }, data: dto });
+    await this.invalidateCache(userId);
+    return updated;
   }
 
   async removeCategory(id: string, userId: string) {
     await this.findOwnedCategory(id, userId);
     await this.prisma.userNavCategory.delete({ where: { id } });
+    await this.invalidateCache(userId);
   }
 
   async createSite(categoryId: string, userId: string, dto: CreateNavSiteDto) {
@@ -193,19 +227,24 @@ export class NavCategoriesService {
     if (count >= MAX_SITES_PER_CATEGORY) {
       throw new BadRequestException(`每个分类最多只能添加 ${MAX_SITES_PER_CATEGORY} 个网站`);
     }
-    return this.prisma.userNavSite.create({
+    const created = await this.prisma.userNavSite.create({
       data: { ...dto, categoryId, sortOrder: count },
     });
+    await this.invalidateCache(userId);
+    return created;
   }
 
   async updateSite(categoryId: string, siteId: string, userId: string, dto: UpdateNavSiteDto) {
     await this.findOwnedSite(categoryId, siteId, userId);
-    return this.prisma.userNavSite.update({ where: { id: siteId }, data: dto });
+    const updated = await this.prisma.userNavSite.update({ where: { id: siteId }, data: dto });
+    await this.invalidateCache(userId);
+    return updated;
   }
 
   async removeSite(categoryId: string, siteId: string, userId: string) {
     await this.findOwnedSite(categoryId, siteId, userId);
     await this.prisma.userNavSite.delete({ where: { id: siteId } });
+    await this.invalidateCache(userId);
   }
 
   /** 校验分类存在且属于当前用户 */

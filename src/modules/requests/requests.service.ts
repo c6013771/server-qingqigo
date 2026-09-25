@@ -46,7 +46,8 @@ export class RequestsService {
   /** 需求列表（公开），按投票数、创建时间倒序 */
   async findAll(query: QueryRequestsDto) {
     const where = query.status ? { status: query.status } : {};
-    const [total, items] = await this.prisma.$transaction([
+    // count 与 findMany 无事务一致性诉求（总数与列表允许微小不等），并发执行减半 DB 耗时
+    const [total, items] = await Promise.all([
       this.prisma.featureRequest.count({ where }),
       this.prisma.featureRequest.findMany({
         where,
@@ -61,7 +62,7 @@ export class RequestsService {
 
   /** 我的需求列表（登录） */
   async findMine(userId: string, query: QueryRequestsDto) {
-    const [total, items] = await this.prisma.$transaction([
+    const [total, items] = await Promise.all([
       this.prisma.featureRequest.count({ where: { userId } }),
       this.prisma.featureRequest.findMany({
         where: { userId },

@@ -39,6 +39,7 @@ model UserFavorite {
   createdAt DateTime @default(now()) @map("created_at")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, sortOrder, createdAt], map: "user_favorites_user_id_sort_order_created_at_idx")
   @@map("user_favorites")
 }
 
@@ -53,6 +54,7 @@ model UserNavCategory {
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   sites       UserNavSite[]
 
+  @@index([userId, sortOrder, createdAt], map: "user_nav_categories_user_id_sort_order_created_at_idx")
   @@map("user_nav_categories")
 }
 
@@ -67,6 +69,7 @@ model UserNavSite {
   createdAt  DateTime        @default(now()) @map("created_at")
   category   UserNavCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
+  @@index([categoryId, sortOrder, createdAt], map: "user_nav_sites_category_id_sort_order_created_at_idx")
   @@map("user_nav_sites")
 }
 
@@ -120,6 +123,8 @@ model FeatureRequest {
   user        User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
   votes       RequestVote[]
 
+  @@index([status, upvotes, createdAt], map: "feature_requests_status_upvotes_created_at_idx")
+  @@index([userId, createdAt], map: "feature_requests_user_id_created_at_idx")
   @@map("feature_requests")
 }
 
@@ -152,6 +157,7 @@ model Feedback {
   updatedAt    DateTime @updatedAt @map("updated_at")
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  @@index([userId], map: "feedbacks_user_id_idx")
+  @@index([userId, createdAt], map: "feedbacks_user_id_created_at_idx")
   @@map("feedbacks")
 }

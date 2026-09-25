@@ -100,7 +100,10 @@ export class AuthService {
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('邮箱或密码错误');
 
-    await this.users.touchLastLogin(user.id);
+    // 最后登录时间不参与响应，异步更新避免增加登录接口的一次同步 DB 写
+    void this.users.touchLastLogin(user.id).catch((e) =>
+      this.logger.warn(`更新最后登录时间失败: ${(e as Error).message}`),
+    );
     return this.buildAuthResult(user);
   }
 

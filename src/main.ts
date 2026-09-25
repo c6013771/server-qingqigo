@@ -73,18 +73,21 @@ async function bootstrap() {
   app.useGlobalInterceptors(new TransformInterceptor());
 
   // Swagger 接口文档：http://localhost:3000/api-docs
-  // 注意挂载路径不带全局前缀 /api，避免与业务路由冲突
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('轻启er API 文档')
-    .setDescription('「轻启er（QingQiEr）」清爽导航主页后端接口文档。统一响应格式：{ code, message, data }。')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api-docs', app, document, {
-    // 刷新页面后保留已填写的 Token，便于调试需登录的接口
-    swaggerOptions: { persistAuthorization: true },
-  });
+  // 生产环境不生成 OpenAPI（createDocument 启动时会同步扫描全部控制器装饰器，徒增启动与内存开销）
+  if (config.get<string>('nodeEnv', 'development') !== 'production') {
+    // 注意挂载路径不带全局前缀 /api，避免与业务路由冲突
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('轻启er API 文档')
+      .setDescription('「轻启er（QingQiEr）」清爽导航主页后端接口文档。统一响应格式：{ code, message, data }。')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api-docs', app, document, {
+      // 刷新页面后保留已填写的 Token，便于调试需登录的接口
+      swaggerOptions: { persistAuthorization: true },
+    });
+  }
 
   const port = config.get<number>('port', 3000);
   await app.listen(port);

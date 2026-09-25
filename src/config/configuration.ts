@@ -3,6 +3,7 @@
  * 注意：DATABASE_URL 由 Prisma 直接读取，无需在此声明。
  */
 export default () => ({
+  nodeEnv: process.env.NODE_ENV ?? 'development',
   port: parseInt(process.env.PORT ?? '3000', 10),
   jwt: {
     secret: process.env.JWT_SECRET ?? 'dev-secret-do-not-use-in-prod',

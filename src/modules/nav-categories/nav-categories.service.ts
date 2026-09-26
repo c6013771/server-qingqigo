@@ -8,9 +8,9 @@ import { UpdateNavSiteDto } from './dto/update-nav-site.dto';
 import { defaultNavCategories, NAV_DEFAULTS_VERSION } from './default-categories';
 
 /** 自定义导航分类数量上限 */
-const MAX_CATEGORIES = 9;
+const MAX_CATEGORIES = 16;
 /** 每个分类下的网站数量上限 */
-const MAX_SITES_PER_CATEGORY = 9;
+const MAX_SITES_PER_CATEGORY = 16;
 /** 导航列表缓存 5 分钟：数据个人化且写操作主动失效，命中可完全绕过 DB */
 const LIST_CACHE_TTL = 300;
 /** 导航列表缓存键 */

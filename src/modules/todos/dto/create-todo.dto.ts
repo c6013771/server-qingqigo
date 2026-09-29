@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
+import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
 
 export class CreateTodoDto {
   @ApiProperty({ description: '待办内容', example: '给产品回邮件' })
@@ -14,10 +14,10 @@ export class CreateTodoDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: '日期格式必须为 YYYY-MM-DD' })
   date: string;
 
-  @ApiPropertyOptional({ description: '是否已完成', example: false })
+  @ApiPropertyOptional({ description: '任务状态：todo 未开始 / doing 进行中 / done 完成 / cancelled 取消', example: 'todo', enum: ['todo', 'doing', 'done', 'cancelled'] })
   @IsOptional()
-  @IsBoolean()
-  done?: boolean;
+  @IsIn(['todo', 'doing', 'done', 'cancelled'], { message: '状态必须为 todo / doing / done / cancelled' })
+  status?: string;
 
   @ApiPropertyOptional({ description: '排序值（越小越靠前）', example: 0, minimum: 0 })
   @IsOptional()

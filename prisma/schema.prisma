@@ -49,7 +49,7 @@ model UserTodo {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
   content   String   @db.VarChar(200)
-  done      Boolean  @default(false)
+  status    String   @default("doing") @db.VarChar(20) // doing / done / cancelled
   date      String   @db.VarChar(10)
   sortOrder Int      @default(0) @map("sort_order")
   createdAt DateTime @default(now()) @map("created_at")

@@ -25,6 +25,7 @@ model User {
   votes        RequestVote[]
   navCategories UserNavCategory[]
   feedbacks    Feedback[]
+  todos        UserTodo[]
 
   @@map("users")
 }
@@ -41,6 +42,22 @@ model UserFavorite {
 
   @@index([userId, sortOrder, createdAt], map: "user_favorites_user_id_sort_order_created_at_idx")
   @@map("user_favorites")
+}
+
+/** 今日待办：登录用户的待办事项，date 为前端本地时区算好的 YYYY-MM-DD */
+model UserTodo {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  content   String   @db.VarChar(200)
+  done      Boolean  @default(false)
+  date      String   @db.VarChar(10)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, sortOrder, createdAt], map: "user_todos_user_id_sort_order_created_at_idx")
+  @@map("user_todos")
 }
 
 model UserNavCategory {

@@ -8,6 +8,7 @@ import { MailModule } from './mail/mail.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { FavoritesModule } from './modules/favorites/favorites.module';
+import { TodosModule } from './modules/todos/todos.module';
 import { RequestsModule } from './modules/requests/requests.module';
 import { HotListsModule } from './modules/hot-lists/hot-lists.module';
 import { WeatherModule } from './modules/weather/weather.module';
@@ -25,6 +26,7 @@ import { FeedbacksModule } from './modules/feedbacks/feedbacks.module';
     AuthModule,
     UsersModule,
     FavoritesModule,
+    TodosModule,
     RequestsModule,
     HotListsModule,
     WeatherModule,

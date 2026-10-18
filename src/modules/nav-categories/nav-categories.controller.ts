@@ -8,6 +8,7 @@ import { UpdateNavCategoryDto } from './dto/update-nav-category.dto';
 import { CreateNavSiteDto } from './dto/create-nav-site.dto';
 import { UpdateNavSiteDto } from './dto/update-nav-site.dto';
 import { ReorderNavCategoriesDto } from './dto/reorder-nav-categories.dto';
+import { ReorderNavSitesDto } from './dto/reorder-nav-sites.dto';
 
 /** 自定义导航分类：全部接口需登录，且只能操作自己的数据 */
 @ApiTags('自定义导航分类')
@@ -58,6 +59,13 @@ export class NavCategoriesController {
   @Post(':id/sites')
   createSite(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: CreateNavSiteDto) {
     return this.navCategories.createSite(id, user.id, dto);
+  }
+
+  // 注意：必须在 @Patch(':id/sites/:siteId') 之前声明，否则 order 会被当作网站 id
+  @ApiOperation({ summary: '拖拽排序：按提交顺序重排分类内的全部网站' })
+  @Patch(':id/sites/order')
+  updateSiteOrder(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReorderNavSitesDto) {
+    return this.navCategories.updateSiteOrder(id, user.id, dto.ids);
   }
 
   @ApiOperation({ summary: '编辑分类下的网站' })

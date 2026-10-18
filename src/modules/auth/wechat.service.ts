@@ -107,7 +107,7 @@ export class WechatService {
 
     // 用一次性 ticket 承载 JWT，避免把 token 直接放在重定向 URL 里
     const ticket = randomBytes(16).toString('hex');
-    const auth = this.buildAuthResult(user);
+    const auth = this.buildAuthResult(user, isNew);
     await this.redis.set(`wechat:ticket:${ticket}`, JSON.stringify(auth), TICKET_TTL);
 
     const target = new URL(frontendCallback || 'about:blank');
@@ -241,10 +241,14 @@ export class WechatService {
   }
 
   /** 签发 JWT 并返回基础用户信息（与邮箱登录返回结构保持一致） */
-  private buildAuthResult(user: { id: string; email: string | null; nickname: string | null; role: string; avatarUrl: string | null }) {
+  private buildAuthResult(
+    user: { id: string; email: string | null; nickname: string | null; role: string; avatarUrl: string | null },
+    isNewUser: boolean,
+  ) {
     const token = this.jwt.sign({ sub: user.id, email: user.email, role: user.role });
     return {
       token,
+      isNewUser,
       user: {
         id: user.id,
         email: user.email,

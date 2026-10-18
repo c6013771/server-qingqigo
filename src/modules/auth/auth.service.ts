@@ -90,7 +90,7 @@ export class AuthService {
     });
     // 验证成功后立即作废，防止复用
     await this.redis.del(key);
-    return this.buildAuthResult(user);
+    return this.buildAuthResult(user, true);
   }
 
   async login(dto: LoginDto) {
@@ -153,10 +153,11 @@ export class AuthService {
   }
 
   /** 签发 JWT 并返回基础用户信息 */
-  private buildAuthResult(user: { id: string; email: string | null; nickname: string | null; role: string }) {
+  private buildAuthResult(user: { id: string; email: string | null; nickname: string | null; role: string }, isNewUser = false) {
     const token = this.jwt.sign({ sub: user.id, email: user.email, role: user.role });
     return {
       token,
+      isNewUser,
       user: { id: user.id, email: user.email, nickname: user.nickname, role: user.role },
     };
   }

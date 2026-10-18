@@ -234,6 +234,22 @@ export class NavCategoriesService {
     return created;
   }
 
+  /** 分类内网站拖拽排序：按提交的 id 顺序重写 sortOrder，要求 id 恰好覆盖分类全部网站 */
+  async updateSiteOrder(categoryId: string, userId: string, ids: string[]) {
+    await this.findOwnedCategory(categoryId, userId);
+    const owned = await this.prisma.userNavSite.findMany({ where: { categoryId }, select: { id: true } });
+    const ownedIds = new Set(owned.map((s) => s.id));
+    const uniqueIds = new Set(ids);
+    if (uniqueIds.size !== ids.length || ids.length !== ownedIds.size || ids.some((id) => !ownedIds.has(id))) {
+      throw new BadRequestException('排序数据与当前网站不一致，请刷新后重试');
+    }
+    await this.prisma.$transaction(
+      ids.map((id, i) => this.prisma.userNavSite.update({ where: { id }, data: { sortOrder: i } })),
+    );
+    await this.invalidateCache(userId);
+    return { sorted: true };
+  }
+
   async updateSite(categoryId: string, siteId: string, userId: string, dto: UpdateNavSiteDto) {
     await this.findOwnedSite(categoryId, siteId, userId);
     const updated = await this.prisma.userNavSite.update({ where: { id: siteId }, data: dto });

@@ -7,6 +7,7 @@ import { mkdir, writeFile } from 'fs/promises';
 import { isAbsolute, join, resolve } from 'path';
 import { RedisService } from '../../redis/redis.service';
 import { UsersService } from '../users/users.service';
+import { RefreshTokenService } from './refresh-token.service';
 
 /** 一次性登录凭证 ticket 的有效期（秒） */
 const TICKET_TTL = 300;
@@ -44,6 +45,7 @@ export class WechatService {
     private users: UsersService,
     private jwt: JwtService,
     private redis: RedisService,
+    private refreshTokens: RefreshTokenService,
   ) {}
 
   /** 生成微信扫码授权地址（附带随机 state 防 CSRF） */
@@ -107,7 +109,7 @@ export class WechatService {
 
     // 用一次性 ticket 承载 JWT，避免把 token 直接放在重定向 URL 里
     const ticket = randomBytes(16).toString('hex');
-    const auth = this.buildAuthResult(user, isNew);
+    const auth = await this.buildAuthResult(user, isNew);
     await this.redis.set(`wechat:ticket:${ticket}`, JSON.stringify(auth), TICKET_TTL);
 
     const target = new URL(frontendCallback || 'about:blank');
@@ -240,14 +242,16 @@ export class WechatService {
     }
   }
 
-  /** 签发 JWT 并返回基础用户信息（与邮箱登录返回结构保持一致） */
-  private buildAuthResult(
+  /** 签发 JWT + refresh token，并返回基础用户信息（与邮箱登录返回结构保持一致） */
+  private async buildAuthResult(
     user: { id: string; email: string | null; nickname: string | null; role: string; avatarUrl: string | null },
     isNewUser: boolean,
   ) {
     const token = this.jwt.sign({ sub: user.id, email: user.email, role: user.role });
+    const refreshToken = await this.refreshTokens.issue(user.id);
     return {
       token,
+      refreshToken,
       isNewUser,
       user: {
         id: user.id,

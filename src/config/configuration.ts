@@ -8,6 +8,8 @@ export default () => ({
   jwt: {
     secret: process.env.JWT_SECRET ?? 'dev-secret-do-not-use-in-prod',
     expiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
+    // Refresh Token 有效期（秒）：每次使用即轮换并顺延，用户闲置超过该时长才需重新登录
+    refreshTtlSeconds: parseInt(process.env.JWT_REFRESH_TTL_SECONDS ?? '2592000', 10),
   },
   redis: {
     host: process.env.REDIS_HOST ?? '127.0.0.1',

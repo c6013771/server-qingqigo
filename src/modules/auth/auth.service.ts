@@ -9,6 +9,8 @@ import { LoginDto } from './dto/login.dto';
 import { SendCodeDto } from './dto/send-code.dto';
 import { SendResetCodeDto } from './dto/send-reset-code.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { RefreshTokenService } from './refresh-token.service';
 
 /** 验证码 10 分钟有效、60 秒重发间隔、单邮箱每日最多 10 次 */
 const CODE_TTL = 600;
@@ -29,6 +31,7 @@ export class AuthService {
     private jwt: JwtService,
     private redis: RedisService,
     private mail: MailService,
+    private refreshTokens: RefreshTokenService,
   ) {}
 
   /** 发送注册验证码 */
@@ -107,6 +110,31 @@ export class AuthService {
     return this.buildAuthResult(user);
   }
 
+  /** 刷新登录态：轮换 refresh token 并签发新 JWT，与登录返回结构一致 */
+  async refresh(dto: RefreshTokenDto) {
+    const rotated = await this.refreshTokens.rotate(dto.refreshToken);
+    if (!rotated) throw new UnauthorizedException('登录已过期，请重新登录');
+
+    // 取最新用户信息签发 JWT，用户被删时拒绝续期
+    const user = await this.users.findById(rotated.userId);
+    if (!user) {
+      await this.refreshTokens.revoke(rotated.token);
+      throw new UnauthorizedException('登录已过期，请重新登录');
+    }
+    const token = this.jwt.sign({ sub: user.id, email: user.email, role: user.role });
+    return {
+      token,
+      refreshToken: rotated.token,
+      user: { id: user.id, email: user.email, nickname: user.nickname, role: user.role },
+    };
+  }
+
+  /** 登出：吊销 refresh token（access token 短寿，到期自然失效） */
+  async logout(dto: RefreshTokenDto) {
+    await this.refreshTokens.revoke(dto.refreshToken);
+    return { loggedOut: true };
+  }
+
   /**
    * 各场景共用的验证码发送：60 秒重发间隔 + 每日上限限流。
    * 重发间隔用 SET NX EX 在发信前原子占位，防止并发请求在检查通过、
@@ -152,11 +180,13 @@ export class AuthService {
     return { sent: true };
   }
 
-  /** 签发 JWT 并返回基础用户信息 */
-  private buildAuthResult(user: { id: string; email: string | null; nickname: string | null; role: string }, isNewUser = false) {
+  /** 签发 JWT + refresh token，并返回基础用户信息 */
+  private async buildAuthResult(user: { id: string; email: string | null; nickname: string | null; role: string }, isNewUser = false) {
     const token = this.jwt.sign({ sub: user.id, email: user.email, role: user.role });
+    const refreshToken = await this.refreshTokens.issue(user.id);
     return {
       token,
+      refreshToken,
       isNewUser,
       user: { id: user.id, email: user.email, nickname: user.nickname, role: user.role },
     };

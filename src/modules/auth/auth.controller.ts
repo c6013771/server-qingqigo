@@ -9,6 +9,7 @@ import { SendCodeDto } from './dto/send-code.dto';
 import { SendResetCodeDto } from './dto/send-reset-code.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { WechatLoginDto } from './dto/wechat-login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 @ApiTags('认证')
 @Controller('auth')
@@ -64,10 +65,24 @@ export class AuthController {
     return this.auth.resetPassword(dto);
   }
 
-  @ApiOperation({ summary: '登录，返回 JWT' })
+  @ApiOperation({ summary: '登录，返回 JWT + refresh token' })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto);
+  }
+
+  @ApiOperation({ summary: '刷新登录态：轮换 refresh token 并签发新 JWT' })
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.auth.refresh(dto);
+  }
+
+  @ApiOperation({ summary: '登出：吊销 refresh token' })
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  logout(@Body() dto: RefreshTokenDto) {
+    return this.auth.logout(dto);
   }
 }
